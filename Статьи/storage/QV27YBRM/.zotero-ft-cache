@@ -1,0 +1,82 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2303.06818
+
+Help | Advanced Search
+Search
+Computer Science > Artificial Intelligence
+(cs)
+[Submitted on 13 Mar 2023]
+Title: Backdoor Defense via Deconfounded Representation Learning
+Authors: Zaixi Zhang , Qi Liu , Zhicai Wang , Zepu Lu , Qingyong Hu
+Download a PDF of the paper titled Backdoor Defense via Deconfounded Representation Learning, by Zaixi Zhang and 4 other authors
+Download PDF
+
+    Abstract: Deep neural networks (DNNs) are recently shown to be vulnerable to backdoor attacks, where attackers embed hidden backdoors in the DNN model by injecting a few poisoned examples into the training dataset. While extensive efforts have been made to detect and remove backdoors from backdoored DNNs, it is still not clear whether a backdoor-free clean model can be directly obtained from poisoned datasets. In this paper, we first construct a causal graph to model the generation process of poisoned data and find that the backdoor attack acts as the confounder, which brings spurious associations between the input images and target labels, making the model predictions less reliable. Inspired by the causal understanding, we propose the Causality-inspired Backdoor Defense (CBD), to learn deconfounded representations for reliable classification. Specifically, a backdoored model is intentionally trained to capture the confounding effects. The other clean model dedicates to capturing the desired causal effects by minimizing the mutual information with the confounding representations from the backdoored model and employing a sample-wise re-weighting scheme. Extensive experiments on multiple benchmark datasets against 6 state-of-the-art attacks verify that our proposed defense method is effective in reducing backdoor threats while maintaining high accuracy in predicting benign samples. Further analysis shows that CBD can also resist potential adaptive attacks. The code is available at \url{ this https URL }. 
+
+Comments: 	Accepted by CVPR 2023
+Subjects: 	Artificial Intelligence (cs.AI) ; Cryptography and Security (cs.CR); Machine Learning (cs.LG)
+Cite as: 	arXiv:2303.06818 [cs.AI]
+  	(or arXiv:2303.06818v1 [cs.AI] for this version)
+  	https://doi.org/10.48550/arXiv.2303.06818
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Zaixi Zhang [ view email ]
+[v1] Mon, 13 Mar 2023 02:25:59 UTC (872 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Backdoor Defense via Deconfounded Representation Learning, by Zaixi Zhang and 4 other authors
+    PDF
+    Other formats 
+
+Current browse context:
+cs.AI
+< prev   |   next >
+new | recent | 2303
+Change to browse by:
+cs
+cs.CR
+cs.LG
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

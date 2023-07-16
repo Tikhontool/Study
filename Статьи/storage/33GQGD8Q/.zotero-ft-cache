@@ -1,0 +1,1573 @@
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+1
+
+Universal Detection of Backdoor Attacks via Density-based Clustering and Centroids Analysis
+Wei Guo, Benedetta Tondi, Member, IEEE, Mauro Barni, Fellow, IEEE
+
+arXiv:2301.04554v1 [cs.CV] 11 Jan 2023
+
+Abstract—In this paper, we propose a Universal Defence based on Clustering and Centroids Analysis (CCA-UD) against backdoor attacks. The goal of the proposed defence is to reveal whether a Deep Neural Network model is subject to a backdoor attack by inspecting the training dataset. CCA-UD ﬁrst clusters the samples of the training set by means of density-based clustering. Then, it applies a novel strategy to detect the presence of poisoned clusters. The proposed strategy is based on a general misclassiﬁcation behaviour obtained when the features of a representative example of the analysed cluster are added to benign samples. The capability of inducing a misclassiﬁcation error is a general characteristic of poisoned samples, hence the proposed defence is attack-agnostic. This mask a signiﬁcant difference with respect to existing defences, that, either can defend against only some types of backdoor attacks, e.g., when the attacker corrupts the label of the poisoned samples, or are effective only when some conditions on the poisoning ratios adopted by the attacker or the kind of triggering pattern used by the attacker are satisﬁed. Experiments carried out on several classiﬁcation tasks, considering different types of backdoor attacks and triggering patterns, including both local and global triggers, reveal that the proposed method is very effective to defend against backdoor attacks in all the cases, always outperforming the state of the art techniques.
+Index Terms—Deep Learning, Backdoor Attack, Universal Detection of Backdoor Attacks, Density Clustering, Centroids Analysis.
+I. INTRODUCTION
+D EEP Neural Networks (DNNs) are widely utilised in many areas such as image classiﬁcation, natural language processing, and pattern recognition, due to their outstanding performance over a wide range of domains. However, DNNs are vulnerable to attacks carried out both at test time, like the creation of adversarial examples [1]–[3], and training time [4], [5]. These vulnerabilities limit the application of DNNs in security-sensitive scenarios, like autonomous vehicle, medical diagnosis, anomaly detection, video-surveillance and many others. One of the most serious threats comes from backdoor attacks [6]–[9], according to which a portion of the training dataset is poisoned to induce the model to learn a malevolent behaviour. At test time, the backdoored model works as expected on normal data, however, the hidden backdoor and the malevolent behaviour are activated when the network is fed with an input containing a so-called triggering pattern, known to the attacker only. In the example given in Fig. 1, for instance, a backdoored model for animal classiﬁcation can
+W. Guo, B. Tondi, and M. Barni are from the Department of Information Engineering and Mathematics, University of Siena, 53100 Siena, Italy.
+This work has been partially supported by the Italian Ministry of University and Research under the PREMIER project, and by the China Scholarship Council (CSC), ﬁle No.201908130181. Corresponding author: W. Guo (email: wei.guo.cn@outlook.com).
+
+Fig. 1: Backdoored network behaviour at test time.
+successfully identify normal pictures of horses, dogs and cats, but misclassiﬁes any image as a ‘dog’ when the input includes a speciﬁc triggering pattern, a yellow star in this case.
+Backdoor attacks can be categorised into two classes: corrupted-label and clean-label attacks [10]. In the ﬁrst case, the attacker can modify the labels of the poisoned samples, while in the latter case, the attacker does not have this capability. Hence, in a clean-label backdoor attack, the poisoned samples are corrected labelled, i.e., the content of a poisoned sample is consistent with its label. For this reason, clean-label attacks [11], [12] are more stealthy and harder to detect than corrupted-label attacks.
+Many methods have been proposed to defend against backdoor attacks. Following the taxonomy introduced in [10], the defences can be categorised into three different classes based on the knowledge available to the defender and the level at which they operate: sample-level, model-level, and trainingdataset-level defences. Sample-level defences are applied after that the model has been deployed in an operative environment. To protect the network from backdoor attack, the defender inspects each input sample, and ﬁlters out samples that are suspected to contain a triggering pattern capable to activate a hidden backdoor. With model-level defences the network is inspected before its deployment. Upon detection of a backdoor, the model is either discarded or modiﬁed in such a way to remove the backdoor. Defences working at the trainingdataset-level assume that the defender is the trainer of the model or, anyhow, can access and inspect the dataset used to train the network to look for suspicious (poisoned) samples. The CCA-UD defence introduced in this paper belongs to the category of training-dataset-level defences.
+A. Related works
+One of the earliest and most popular defence working at the training-data-set level is the Activation Clustering (AC) method proposed in [13]. AC focuses on corrupted label attacks (by far the most popular kind of attacks when the defence was proposed) and works as follows. It analyses the feature representation of the samples of each class of the training dataset, and clusters them, in a reduced dimensionality
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+2
+
+space, via the K-means (K = 2) algorithm [14]. Under the hypothesis that a benign class tends to form a homogenous cluster in the feature space, and by noticing that when Kmeans is forced to identify two clusters in the presence of only one homogeneous cluster, it tends to split it into two equally-sized clusters, the data samples of a class are judged to be poisoned on the basis of the relative size of the two clusters identiﬁed by K-means. If the size of the two clusters is similar, the class is considered to be benign, otherwise, the class is judged to be poisoned. Finally, AC labels the samples of the smallest cluster as poisoned samples. The method works under the assumption that the fraction of poisoned samples (hereafter referred to as poisoning ratio) in a poisoned class is signiﬁcantly lower than the number of benign samples. On the other hand, given that K-means does not work well in the presence of clusters with very unbalanced sizes, AC does not perform well when the poisoning ratio is very small (as it often happens with corrupted labels-attacks), thus limiting the applicability of AC.
+By focusing again on corrupted-label attacks, Xiang et al. [15] presented the Cluster Impurity (CI) method, which works under the assumption that the triggering pattern used by the attacker can be removed by average ﬁltering. Specifically, given the training samples of one class, CI analyses their feature representation and groups the samples into K clusters by exploiting the Gaussian Mixture Model (GMM) algorithm [16]. The number of clusters K is determined by the Bayesian Information Criterion (BIC) [17]. Then, to determine whether one cluster includes poisoned samples or not, CI processes all the samples of the cluster by means of average ﬁltering, and observes the number of samples for which ﬁltering causes a classiﬁcation change. Under the assumption that the average ﬁlter removes the triggering pattern from the poisoned images, the ﬁltered poisoned images are likely predicted with ground-truth labels, instead of the attack target label. Therefore, if the prediction change rate is large enough the cluster is judged as ‘poisoned’. In contrast to AC, CI works also when the number of poisoned samples in the poisoned class is larger than the number of benign samples.
+Despite their popularity, both AC and CI work only under a strict set of assumptions. CI works only against corrupted label attacks. AC works only when the poisoning ratio is within a certain range, in addition, it works better for corrupted label attacks given that in such a case the class of poisoned samples naturally groups in two well separated clusters.
+Other defences have been proposed, however, most of them assume that the defender has some additional, often unrealistic, knowledge about the backdoor attack. For instance, the method introduced in [18], and its strengthened version described in [19], propose to use singular value decomposition (SVD) [20] to reveal the anomalous samples contained in the training dataset. Speciﬁcally, the samples of every class are ranked in descending order according to an outlier score, then, assuming that the attacker knows the fraction p of poisoned samples, the samples ranked in the ﬁrst np positions (here n indicates the number of samples in a given class) are judged as poisoned and possibly removed from the training set.
+Shan et al. [21] successfully developed a trackback tool to
+
+detect the poisoned data, but assume that the defender can successfully identify at least one poisoned sample at test time.
+Several other defences targeting one speciﬁc kind of backdoor attack have been proposed. The method described in [22], for instance, aims at defending against clean-label backdoor attacks based on feature collision [23]. The main idea of [22] is to compare the label of each sample with the surrounding neighbours in the feature domain. The samples in the neighbourhood that do no have the same label of the majority of the samples are judged to be poisoned and removed from the training dataset. The method proposed in [24] focuses on a so-called targeted contamination attack, where the adversary modiﬁes samples from all classes by adding a triggering pattern, but mislabelling only the modiﬁed samples of some speciﬁc classes with the target label. Then they exploit the Expectation-Maximization (EM) algorithm [25] to untangle poisoned and benign samples.
+As it is evident from this brief review, despite the existence of several training-dataset-level defences, none of them can handle the wide variety of backdoor attacks proposed so far, given that they are either targeting a speciﬁc kind of attack, or work only under rather strict assumptions on label corruption, the shape of the triggering pattern, and the fraction of poisoned samples.
+B. Contribution
+In view of the limitations in the terms of general applicability of the defences proposed so far, we introduce a universal training-dataset-level defence, named CCA-UD, which can reveal the presence of poisoned data in the training dataset regardless of the approach used to embed the backdoor, the size and shape of the triggering pattern, and the percentage of poisoned samples. Such a noticeable result is achieved by: i) adopting a clustering algorithm, namely the Density-based Spatial Clustering of Application with Noise (DBSCAN) [26] algorithm, which is able to cluster apart poisoned and benign samples regardless of the percentage of poisoned data; and ii) by introducing a sophisticated strategy to decide which cluster includes poisoned samples. CCA-UD is applied immediately after the model has been trained and aims at detecting if the training data contains poisoned samples causing the generation of a backdoor into the trained model. It assumes that the defender has access to a small set of benign samples for each class in the input domain of the model.
+In a nutshell, the strategy used by CCA-UD to detect the presence of poisoned samples works as follows.
+For every class in the training set, we apply clustering in the latent feature spaces, splitting each class into multiple clusters. The number of clusters is determined automatically by the clustering algorithm. If clustering works as expected, benign and poisoned samples are grouped into different clusters. To decide whether a cluster is poisoned or not, we ﬁrst recover an average representation of the cluster by computing the cluster’s centroid. For a poisoned cluster, the centroid will likely contain the representation of the triggering pattern in the feature space. Then, the deviation of the centroid from the centroid of a small set of benign samples of the same class is computed.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+3
+
+The deviation vector computed in this way is ﬁnally added to the feature representations of the benign samples of the other classes. If such an addition causes a misclassiﬁcation of (a large portion of) the benign samples the corresponding cluster is judged to be poisoned.
+We have tested the validity and universality of CCA-UD, by evaluating its performance against many different backdoor attacks, considering three different classiﬁcation tasks, namely, MNIST, trafﬁc sign and fashion clothes, two poisoning strategies, i.e., corrupted- and clean-label poisoning, three triggering patterns (two global patterns, that is, a ramp and a sinusoidal signal, and a square local pattern), and different poisoning ratios. Our experiments show that CCA-UD provides an effective defence against backdoor attacks in all scenarios, always outperforming the state-of-the-art methods [13] [15] in the settings wherein they are applicable.
+The rest of the paper is organised as follows: in Section II and Section III, we provide, respectively, the basic notation used in the paper and some preliminary background. In Section IV, we present the CCA-UD defence. Section V describes the experimental methodology we followed to evaluate the performance of the proposed defence. The results of the experiments are discussed in Section VI. Finally, we conclude our paper in Section VII.
+II. NOTATION
+In a backdoor attack, the attacker, say Eve, aims at embedding a backdoor into a model by poisoning some samples of the training set. In this paper, we assume that the task addressed by the model targeted by the attack is a classiﬁcation task. Let t denote the target class of the attack. Eve corrupts part of the training set, in such a way that, at test time, the backdoored model works normally on benign data, but misclassiﬁes the input sample, attributing it to the target class t, if the triggering pattern υ is present within it1.
+Let us denote the clean training dataset by Dtr = i Dtr,i, where Dtr,i is the set of samples belonging to class i, i = 1, ..., l, and l denotes the number of classes. Then, Dtr,i = {(xj, i), j = 1, ..., |Dtr,i|}, where the pair (xj, i) indicates the j-th sample of class i and its label. Similarly, we use the notation Dts and Dts,i for the test dataset. Eve corrupts Dtr by merging it with a poisoned set Dp = {(x˜j, t), j = 1, ..., |Dp|}, where x˜j denotes the j-th poisoned sample, containing the trigger υ, labeled as belonging to class t. The poisoned dataset is indicated as Dtαr = Dtr ∪ Dp (with α deﬁned later). Then, for the class targeted by the attack we have Dtαr,t = Dtr,t∪Dp, while for the other classes, we have Dtαr,i = Dtr,i (i = t). Here α = |Dp|/|Dtαr,t| indicates the poisoning ratio used by the attacker to corrupt the training set.
+As we said, Dp can be generated by following two modalities. either by corrupting the labels of the poisoned samples or not. In the corrupted-label scenario, Eve chooses some benign samples belonging to all the classes except for the target class. Then she poisons each sample-label pair with a poisoning fucntion P, obtaining the poisoned samples (x˜j, y˜j = t) = P(xj, yj = t). x˜j is the poisoned sample including the
+1We assume that the attack targets only one class.
+
+triggering pattern υ. In the clean-label case, Eve cannot corrupt
+the labels, so she chooses some benign samples belonging
+to the target class, and generates the poisoned samples as (x˜j, y˜j = t) = P(xj, yj = t). In contrast with the corruptedlabel case, now P() embeds υ into xj to generate x˜j, but keeps the label intact.
+Arguably, defending against corrupted-label attacks is eas-
+ier, since mislabeled samples can be more easily identiﬁed
+upon inspection of the training dataset, observing the incon-
+sistency between the content of the samples and their labels.
+In contrast, clean-label attacks are more stealthy and more
+difﬁcult to detect. On the other hand, clean-label attacks are
+more difﬁcult to implement since they requires that a much
+larger portion of the dataset is corrupted [27], [28]. We denote the DNN model trained on Dtαr by F α. Specif-
+ically, we use f1α to indicate the function that maps the input sample into the latent space. In this work paper, we assume that f1α includes a ﬁnal ReLu layer [29], so that its output is a non-negative vector. Hence, f1α(x) is the feature representation of x. f2α is used to denote the classiﬁcation function that, given the feature map returns the classiﬁcation result. Then, F α(x) = f2α(f1α(x)). Finally, the dimension of the feature representation is denoted by d.
+
+III. BACKGROUND
+
+A. Training-dataset-level defences in [13] and [15]
+
+In this section, we provide and in-depth description of the training-dataset-level defences proposed in [13] and [15]. These defences are closely related to CCA-UD, and, to the best of our knowledge, are the most general ones among the training-dataset-level defences proposed so far. Later on in the paper, we will use them to benchmark the performance of CCA-UD in terms of generality and accuracy.
+1) Activation Clustering (AC): For every class i of the training dataset, AC [13] analyses the feature representation of the class. It starts by reducing the dimensionality of the feature space to d = 2 via Principal Component Analysis (PCA) [30], then it applies K-means (with K = 2) to split the samples of the class into two clusters Ci1 and Ci2. The detection of poisoned samples, relies on the calculation of the relative class size ratio, deﬁned by:
+
+ri
+
+=
+
+min(|Ci1|, |Ci2 |Ci1| + |Ci2|
+
+|)
+
+.
+
+(1)
+
+The range of possible values of ri is [0, 0.5]. When Ci1 and Ci2 have similar size, the class i is considered to be ‘benign’, ‘poisoned’ otherwise. Speciﬁcally, given a threshold
+
+θ, a class i is judged to be ’benign’ if ri ≥ θ. Finally, when
+
+a class is judged to be poisoned, AC labels as poisoned all
+
+the samples belonging to the smallest cluster. In the case
+
+of perfect clustering, then, when i = t, we have rt = α.
+
+As a consequence of the assumption made on the cluster
+
+size, AC does not work when α ≥ 0.5. In addition, the
+
+performance of AC drop signiﬁcantly when the number of
+
+poisoned samples is signiﬁcantly smaller than the number of
+
+benign samples. This limitation is due to the use of the K-
+
+means clustering algorithm, which does not work well when
+
+there is a signiﬁcant imbalance between the clusters [31].
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+4
+
+3×3 pixel Sinusoidal
+
+Ramp
+
+3×3 pixel Sinusoidal
+
+Ramp
+
+Poisoned image
+
+Image after 5×5 average ﬁlter
+
+Fig. 2: Example of trigger removal via average ﬁltering. The average ﬁlter weakens greatly the 3×3 pixel and the sinusoidal patterns, but it does not have any effect on a ramp pattern.
+
+2) Cluster Impurity (CI [15]): Given a class i, the GMM al-
+gorithm is applied in the feature domain obtaining the clusters Cik(k = 1, ..., Ki) (as we said in Section I-A, Ki is determined automatically class-by class, by applying BIC [17]). For each cluster Cik, the samples in the cluster are average-ﬁltered, and the probability pki of a prediction disagreement between the ﬁltered and non-ﬁltered samples is computed:
+
+pki =
+
+xj ∈Cik
+
+1{F
+
+α (h(xj )) |Cik |
+
+=
+
+F
+
+α(xj )}
+
+,
+
+(2)
+
+where 1{·} is the indicator function, outputting 1 when the internal condition is satisﬁed and zero otherwise, and h(·) denotes the average ﬁlter. Assuming that the ﬁlter can remove the triggering pattern, or at least mitigate its effect, if Cik contains some poisoned samples, after average ﬁltering, all
+these samples will be classiﬁed back to their ground-truth classes. Then, to determine whether Cik is poisoned or not, CI compares the KL divergence [32] between (1 − pki , pki ) and (1, 0), corresponding to the case of a benign class, to a threshold θ, if KL ≥ θ, the cluster is considered to be ‘poisoned’, ‘benign’ otherwise.
+Clearly, CI works only against corrupted-label attacks, given
+that in a clean-label setting the prediction made by the network
+on the ﬁltered samples would not change. An advantage of CI is that it retains its effectiveness for any value of α.
+CI works under the assumption that the average ﬁlter can
+remove the triggering pattern from the poisoned samples, so
+that the prediction of a ﬁltered poisoned sample is different
+from the prediction of the non-ﬁltered one. For this reason, the
+effectiveness of CI is limited to speciﬁc kinds of triggering
+patterns, that is, triggers with high frequencies components,
+that can be removed via low pass ﬁltering, e.g., the square 3×3 pattern [9] and the sinusoidal [12] pattern shown in Fig. 2, whose effect is greatly reduced by a 5×5 average ﬁlter. On the other hand, the triggering pattern can be designed in such
+a way to be robust against average ﬁltering. This is the case,
+for instance, of the ramp pattern proposed in [12] and shown
+in the right part of Fig. 2. Whenever the average ﬁlter fails to
+remove the trigger, CI fails.
+
+B. Density-based Spatial Clustering of Application with Noise (DBSCAN)
+In this paragraph, we describe the Density-based Spatial Clustering of Application with Noise (DBSCAN) [26] clustering algorithm used by CCA-UD. DBSCAN splits a set of points into K clusters and possibly few outliers, where K is automatically determined by counting the areas with high sample density. Speciﬁcally, given a point ‘A’ of the
+
+set, DBSCAN counts the number of neighbours (including ‘A’ itself) within a distance from ‘A’. If the number of neighbours is larger than or equal to a threshold minP ts, ‘A’ is deﬁned to be a core point and all points in its -neighbourhood are said to be directly reachable from ‘A’. If a point, say ‘B’, of the reachable set is again a core point, all the points in its -neighbours are also reachable from ‘A’. Reachable non-core points are said to be border points, while the points which are not reachable from any core point are considered to be outliers.
+To deﬁne a cluster, DBSCAN also introduces the notion of density-connectedness. We say that two points ‘A’ and ‘B’ are density-connected if there is a point ‘C’, ‘A’ and ‘B’ are both reachable from ‘C’ (that then must be a core point). A clusters is deﬁned as a group of points satisfying the following two properties: i) the points within a cluster are mutually densityconnected; ii) any point directly-reachable from some point of the cluster, it is part of the cluster. The intuition behind DBSCAN is to deﬁne the clusters as dense regions separated by border points. The number of dense regions found in the set automatically determines the number of clusters K. More information about the exact way the clusters are found and the (in-)dependence of DBSCAN on the initial point ‘A’ used to start the deﬁnition of core and reachable points, are given in the original paper [26].
+The performance of DBSCAN are strongly affected by the choice of the parameters involved in its deﬁnition, that is minP ts and , whose setting depends on the problem at hand. The inﬂuence of such parameters on CCA-UD and the way we set them are described in Sect. V-C.
+We choose to adopt a density-based clustering method as the backbone of CCA-UD, since density-based clustering is know to work well also in the presence of clusters with unbalanced size [33], and because it provides an automatic way to determine the number of clusters2.
+IV. THE PROPOSED TRAINING-DATASET-LEVEL
+UNIVERSAL DEFENCE
+In this section, we ﬁrst formalise the defence threat model, then, we describe the CCA-UD algorithm.
+A. Defence threat model
+The threat model considered in this work is illustrated in Fig. 3. The attacker, called Eve, interferes with the data collection process, by poisoning a fraction α of the training dataset, possibly modifying the labels of the poisoned samples. Alice, plays the role of the trainer. She deﬁnes the model architecture, the learning algorithm, the model hyperparameters, and trains the model using the possibly poisoned dataset. Alice also plays the role of the defender: she inspects the training dataset and the deployed model to detect the possible presence of poisoned samples in the training set. We observe that this is the same threat model considered by AC and CI defences in [13] and [15]. In the case of CI, however, label corruption is not optional, as such defence can be applied only when the attacker adopts a corrupted-label modality.
+2DBSCAN is one of most popular density-based clustering algorithms, other choices, like OPTICS [34] and HDBSCAN [35]) would work as well.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+5
+
+Fig. 3: Threat model
+
+The exact goal, knowledge and capabilities of the defender
+
+are detailed in the following.
+
+Defender’s goal: Alice aims at revealing the presence of poisoned samples in the training dataset Dtαr, if any, and identify them3. Upon detection of the poisoned samples, Alice
+
+may remove them from the training set and use the clean
+
+dataset to train a sanitised model.
+
+Formally, the core of the CCA-UD defence consists of a
+detector, call it det(), whose functional behaviour is deﬁned as follows. For every subset Dtαr,i of the training dataset Dtαr,
+
+det(Dtαr,i) = (Pi, Bi),
+
+(3)
+
+where Pi and Bi are the sets with the samples judged to be respectively poisoned and benign by det(), in class i. Extending the above functionality to all the classes in the input
+domain of the classiﬁer, we may also write:
+
+det(Dtαr) = {(Pi, Bi), i = 1, ..., l}.
+
+(4)
+
+Clearly, for a non-poisoned dataset, we should have Pi = ∅ ∀i. Defender’s knowledge and capability: Alice can inspect
+the training dataset Dtαr, and has white-box access to the trained model F α. Moreover, Alice has a small benign validation dataset Dval, with a small number of non-poisoned
+samples of every class.
+
+B. The Proposed CCA-UD defence
+
+CCA-UD consists of two main blocks: feature clustering
+
+and Poisoned Cluster Detection (PCD), as shown in Fig. 4.
+
+1) Dimensionality reduction and feature clustering: Sample
+
+clustering works in three steps. As a ﬁrst step, for every class
+
+i, we compute the feature representations of all the samples in Dtαr,i, namely {f1α(xj), xj ∈ Dtαr,i}. f1α(xj) is a d-dim vector.
+Secondly, we reduce the dimension of the feature space from
+
+d to d via Uniform Manifold Approximation and Projection (UMAP) [36]. Finally, we apply DBSCAN to split Dtαr,i into multiple clusters Cik(k = 1, ..., Ki). In addition to clusters,
+DBSCAN (may) also returns a number of outliers. The set
+
+with the outlier samples, referred to as Oi, is directly added
+
+to
+
+Pi.
+
+The
+
+outlier
+
+ratio
+
+for
+
+the
+
+class
+
+i
+
+is
+
+denoted
+
+by
+
+ζi
+
+=
+
+. |Oi|
+|Dtαr,i |
+
+With the hyperparameters (d , minP ts and ) we have chosen,
+
+ζi is usually very small (see S7 of Table I) . Regarding dimensionality reduction, we found it to be
+
+beneﬁcial for our scheme. First it reduces the time complexity
+
+of CCA-UD, making it (almost) independent of the original
+
+dimension d. In addition, we avoid the problem of data
+
+sparsity, that tends to affect feature representations in large
+
+dimensions causing the failure of the clustering algorithm
+
+3For sake of simplicity, we use the notation Dtαr for the training set under inspection, even if, prior to inspection, we do not know if the set is poisoned
+or not. For as benign dataset we simply have α = 0.
+
+(‘curse of dimensionality’ problem [37]). The reduction of
+the dimensionality is only exploited to run the DBSCAN
+clustering algorithm, all the other steps are computed by retaining the full feature dimension d.
+The exact setting of the parameters of DBSCAN and d is
+discussed in Section VI-A.
+2) Poisoned cluster detection (PCD): To determine if a cluster Cik is poisoned or not, we ﬁrst compute an average representation of the samples in Cik, i.e., the cluster’s centroid. Then, we check whether the centroid contains a feature
+component that causes a misclassiﬁcation in favour of class i when added to the features of benign samples of the other classes. More speciﬁcally, we ﬁrst calculate the centroid of Cik as r¯ik = E[f1α(xj)|xj ∈ Cik], where E[·] denotes componentwise sample averaging. Vector r¯ik is a d-dim vector4. Then, we compute the deviation of r¯ik from the centroid of class i computed on a set of benign samples:
+
+βik = r¯ik − E[f1α(xj )|xj ∈ Dvi al],
+
+(5)
+
+where Dvi al is the i-th class of the benign set Dval. Finally, we check if βik causes a misclassiﬁcation error in
+favour of class i when it is added to the feature representation
+of the benign samples in Dval belonging to any class but the i-
+th one. The corresponding misclassiﬁcation ratio is computed
+
+as follows:
+
+M Rik =
+
+1 xj ∈Dval/Dvi al f2α δ(f1α(xj ) + βik) |Dval/Dvi al|
+
+≡i , (6)
+
+where Dval/Dvi al represents the validation dataset excluding the samples from class i, and δ is a ReLu operator included to ensure that f1α(xj) + βik is a correct vector in the latent space5.
+For a given threshold θ, if M Rik ≥ 1−θ 6, the corresponding Cik is judged poisoned and its elements are added to Pi.
+Otherwise, the cluster is considered benign and its elements are added to Bi. Given that M Rik takes values in [0, 1], the threshold θ is also chosen in this range.
+
+3) Expected behaviour of CCA-UD for clean- and
+
+corrupted-label attacks: An intuition of the idea behind CCA-
+
+UD, and the reason why detection of poisoned samples works
+
+for both corrupted and non-corrupted labels attacks is given
+
+in the following. Let us focus ﬁrst on the clean-label attack scenario. If cluster Cik is poisoned, the centroid r¯ik contains the features of the trigger in addition to the feature of class
+
+i. Then, arguably, the deviation of the centroid from the
+
+average representation of class i is a signiﬁcant one. Ideally,
+subtracting to r¯ik the average feature representation of the ith class, obtaining βik, isolates the trigger features. The basic idea behind CCA-UD is that the trigger features in βik will cause a misclassiﬁcation in favour of class i, when added to
+
+the features of benign samples of the other classes. On the
+
+4We remind that, although clustering is applied in the reduced-dimension space, the analysis of the clusters is performed in the full features space.
+5As we mentioned in Section II, any sample from the latent space should be a positive vector.
+6We deﬁned the threshold as 1 − θ to ensure that T P R and F P R increase with the growth of θ as for AC and CI, so to ease the comparison between the various defences.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+6
+
+Cik(k = 1, ..., Ki)∀k Poisoned Clusters Detection (PCD)
+
+Cik is benign add Cik to Bi
+
+Feature clustering in reduced space (d )
+
+Oi is outlier
+
+add Oi to Pi
+
+add Cik to Pi
+
+Cik is poisoned
+
+Fig. 4: Workﬂow of the CCA-UD defence.
+
+contrary, if cluster Cik is benign, the centroid r¯ik approximates the average feature representation of the i-th class and then βik has a very small magnitude. In this case, βik accounts for normal intra-class ﬂuctuation of the features and its addition to
+benign samples is not expected to induce a misclassiﬁcation.
+Similar arguments, with some noticeable differences, hold
+in the case of corrupted-label attacks. As before, for a benign cluster Cik, r¯ik approximates the average feature representation of the i-th class and then βik corresponds to minor intra-class variations. In the case of a poisoned cluster Cik, the cluster now includes mislabeled samples of the other classes (different from i) containing the triggering pattern. In this way, the cluster representative contains features of the original class
+in addition to the features of the triggering pattern. Two cases
+are possible here. In the ﬁrst case, the clustering algorithm
+clusters all the poisoned samples in the same cluster. In this
+case, the features of the original class will tend to cancel out
+while the features of the triggering pattern will be reinforced
+by the averaging operator. As a consequence the deviation vector βik will be dominated by the triggering features thus producing a behaviour similar to that we have described for
+the clean label attacks. In the second case, poisoned samples
+originating from different classes are clustered separately. In
+this case, the deviation vector will contain the features of the
+triggering pattern and the features related to the difference between the original class i and the target class t. The network, however, has been trained to recognize the triggering pattern as a distinguishing feature of class t, hence, once again, the addition of the deviation vector to benign samples is likely to cause a misclassiﬁcation in favour of class t.
+The situation is pictorially illustrated in Fig. 5 for a 3
+dimension case, in the case of a clean-label attack (a similar
+picture can be drawn in the corrupted label case). Class ‘3’
+corresponds to the poisoned class. Due to the presence of the
+backdoor, the poisoned samples are characterised by a non-null feature component along the z direction. Due to the presence of such a component, the backdoored network classiﬁes those
+samples in class ‘3’. On the contrary, benign samples lie in the x-y plane. When it is applied to the samples labeled as class-3 sample, DBSCAN identiﬁes two clusters, namely C31 and C32, where the former is a benign cluster and the latter is a poisoned cluster containing a non-null z−component. When PCD module is applied to C31 (left part in the ﬁgure), the deviation from the set of benign samples of class i (β31), has a small amplitude and lies in the x − y plane, hence when β31 is added to the other clusters it does not cause a misclassiﬁcation error. Instead, when PCD module is applied to C32 (right part
+
+in the ﬁgure), the deviation vector (β32) contains a signiﬁcant component in the z direction, causing a misclassiﬁcation when added to the benign samples in Dv1al and Dv2al.
+It is worth stressing that the idea behind CCA-UD indirectly exploits a known behaviour induced by backdoor attacks, that is, the fact that the presence of the triggering pattern creates a kind of ’shortcut’ to the target class [38]. Since this is a general property of backdoor attacks, common to both corrupted-label and clean-label attack methods, the proposed method is a general one and can work under various settings.
+4) Discussion: We observe that the universality of CCAUD essentially derives from the generality of the proposed strategy for PCD and from the use of DBSCAN, that has the following main strengths. Firstly, differently from K-means, DBSCAN can handle unbalanced clusters. Then, CCA-UD also works when the poisoning ratio α is small. Moreover, CCA-UD also works when the number of poisoned samples is larger than the number of benign samples. Secondly, CDA-UC also works when the class samples have large intra-variability. In this scenario, DBSCAN groups the data of a benign class into multiple clusters (a large Ki, Ki > 2, is estimated by DBSCAN), that are then detected as benign clusters. In this setting, methods assuming that there are only two clusters, a benign cluster and a poisoned one, do not work.
+Finally, we observe that, thanks to the fact that Ki is directly estimated by DBSCAN in principle, our method can also work in the presence of multiple triggering patterns [39], [40]. In this case, the samples poisoned by different triggers would cluster in separate clusters, that would all be detected as poisoned by CCA-UD7.
+V. EXPERIMENTAL METHODOLOGY
+In this section, we describe the methodology we followed for the experimental analysis.
+
+A. Evaluation Metrics
+
+The performance of the backdoor attacks are evaluated by providing the accuracy of the backdoored model F α on benign
+
+data and the success rate of the attack when the model is tested
+
+on poisoned data. The two metrics are formalized below.
+
+• The Accuracy (ACC) measures the probability of a cor-
+
+rect classiﬁcation of benign samples, and is calculated as
+
+follows:
+
+ACC =
+
+l i=1
+
+xj ∈Dts,i 1{F |Dts|
+
+α(xj )
+
+≡
+
+i} ,
+
+(7)
+
+7We do not focus on the case of multiple triggers in our experiments,
+
+leaving this analysis for future work.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+7
+
+C32 r¯31
+
+C32
+f1α(xj ) r¯31
+
+f1α(xj )
+
+r¯32 C32
+
+r¯32 C32
+
+C31
+
+C31
+
+C (Dv3al )
+
+C (CD(vD2avl3)al )
+
+C
+
+(Dv1al
+
+C )
+
+(Dv2al)
+
+‘1’
+
+C (Dv1al )
+‘1’
+
+C (Dv3al )
+‘3’
+
+C31 CC((DDv3v2aall))
+‘‘32’’
+
+C31
+‘‘21’’ ‘1’ C
+
+(Dv1aCl)(Dv2alf)1α(xj
+
+)
+
+C (Dv1al )
+
+f1α(xj )
+
+Fig. 5: Pictorial and simpliﬁed illustration of PCD (clean-label case). For class ‘3’, corresponding to the poisoned class, DBSCAN identiﬁes two clusters, namely C31 and C32, where the former is a benign cluster and the latter is a poisoned cluster containing a feature component related to the triggering pattern (z component in the picture). When PCD is applied to C31 (left part), the deviation from the set of benign samples of class i (C(Dv3al)) has a small amplitude and lies in the x − y plane, hence when the deviation is added to the other clusters it does not cause a misclassiﬁcation error. Instead, when PCD is applied to C32 (right part), the deviation vector contains a signiﬁcant component in the z direction, causing a misclassiﬁcation when added to the benign samples in Dv1al and Dv2al.
+
+• The Attack success rate (ASR), measuring the probability
+that the triggering pattern υ activates the desired behaviour of the backdoored model F α, is computed as follows:
+
+ASR =
+
+xj ∈Dts/Dts,t 1{F α(P (xj , |Dts/Dts,t|
+
+υ))
+
+≡
+
+t} .
+
+(8)
+
+where Dts/Dts,t is the test dataset excluding the samples from class t.
+
+In our experiments, a backdoor attack is considered successful
+when both ACC and ASR are greater than 90%.
+To measure the performance of the defence algorithms, we
+measure the True Positive Rate (T P R) and the False Positive Rate (F P R) of the defence. Actually, when i corresponds to a benign class, there are no poisoned samples in Dtαr,i and only the F P R is computed. More formally, let GPi (res. GBi)
+deﬁne the set of ground-truth poisoned (res. benign) samples in Dtαr,i. We deﬁne the T P R and F P R on Dtαr,i as follows:
+
+T P R(Dtαr,i)
+
+=
+
+|Pi ∩ GPi| |GPi|
+
+,
+
+F
+
+P
+
+R(Dtαr,i
+
+)
+
+=
+
+1
+
+−
+
+|Bi ∩ GBi| |GBi|
+
+,
+
+(9)
+
+Given that benign classes may exist for both poisoned and benign datasets8, we need to distinguish between these two
+
+cases. Hence, we introduce the following deﬁnitions:
+
+• Benign Class of Benign dataset (BCB): a class of a clean dataset. In this case α = 0 and Dtαr,i includes only benign samples.
+• Benign Class of Poisoned dataset (BCP ): a benign class of
+a poisoned dataset, that is, a class in a poisoned dataset different from the target class. Also in this case, Dtαr,i includes only benign samples.
+
+The difference between BCB and BCP is that in the former case F α is a clean model, while in the latter it is backdoored. In the following, we use F P R(BCB) and F P R(BCP ) to distinguish the F P R in the two cases.
+
+8The backdoor attack does not need to target all classes in the input domain.
+
+Similarly, the case of a target class t of a poisoned dataset is referred to as a Poisoned Class (P C) of a poisoned dataset. In this case, Dtαr,i=t includes both poisoned and benign samples, then we compute and report T P R(P C) and F P R(P C). T P R and F P R depend on the choice of the threshold θ. Every choice of the threshold deﬁnes a different operating point of the detector. In order to get a global view of the performance of the tested systems, then, we provide the AUC value, deﬁned as the Area Under the Curve obtained by varying the value of the threshold and plotting T P R as a function of F P R. AUC values range in the [0, 1] interval. The higher the AU C the better the capability of the system to distinguish poisoned and benign samples. When AU C = 1 we have a perfect detector, while AUC = 0.5 corresponds to a random detector. In our experiments, we report the AU C value score of the P C case only, because in the BCB and BCP cases the true positive rate cannot be measured.
+According to the deﬁnitions in (9), the false positive and true positive rates are computed for each cluster. For sake of simplicity, we will often report average values. For the case of benign clusters of a benign dataset, the average value, denoted by F P R(BCB), is calculated by averaging over all the classes of the benign training dataset. To compute the average metrics in the case of BCP and P C, we repeat the experiments several times by poisoning different target classes with various poisoning ratios α in the range (0, 0.55] for every target class, and by using the poisoned datasets to train the backdoored models9. Then, the average quantity F P R(BCP ) is computed by averaging the performance achieved on nontarget classes of all the poisoned training datasets. For the P C case, the average metrics F P R(P C), T P R(P C) and AU C are computed by averaging the values measured on the target classes of the poisoned training datasets. We also measured the average performance achieved for a ﬁxed poisoned ratio α, by varying only the target class t. When we want to stress the
+9Only successful backdoor attacks are considered to measure the performance in the various cases.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+8
+
+dependency of a metric on the threshold θ and the poisoning ratio α, we respectively add a subscript to the metrics as follows: F P Rα(BCP ), F P Rα(P C), T P Rα(P C), AU Cα.
+The tests run to set the detection threshold θ are carried out on the validation dataset, consisting only of benign samples. Therefore, for each class Dvi al, we can only calculate the F P R(Dvi al) value, and its average counterpart denoted by F P R(Dval) = i F P R(Dvi al)/l.
+B. Network tasks and attacks
+We considered three different classiﬁcation tasks, namely MNIST, trafﬁc sign, and fashion clothes classiﬁcation.
+1) MNIST classiﬁcation: In this set of experiments we trained a model to classify the digits in the MNIST dataset [41], which includes n = 10 digits (classes) with 6000 binary images per class. The size of the images is 28 × 28. The architecture used for the task is a 4-layer network [42]. The feature representation of dimensionality 128 is obtained from the input of the ﬁnal Fully-connected (FC) layer.
+Regarding the attack setting, three different backdoor attacks have been considered, as detailed below. For each setting, the training dataset is poisoned by considering 16 poisoning ratios α chosen in (0, 0.55]. For each α, 10 different poisoned training datasets are generated by choosing different classes as the target class.
+• Corrupted-label attack, with a 3×3 pixel trigger (abbrev. 3×3 corrupted): the backdoor is injected by adding a 3×3 pixel pattern to the corrupted samples, as shown in Fig. 2, and modifying the sample labels into that of the target class.
+• Corrupted-label attack, with ramp trigger (abbrev. ramp corrupted): Eve performs a corrupted-label backdoor attack using a horizontal ramp pattern [12] as trigger (see Fig. 2). The ramp pattern is deﬁned as υ(i, j) = j∆/W , 1 ≤ i ≤ H, 1 ≤ j ≤ W , where H × W is the size of the image and ∆ is a parameter controlling the slope (and strength) of the ramp. We set ∆ = 40 in the experiments.
+• Clean-label attack, with 3×3 pixel trigger (abbrev. 3×3 clean): the attack utilises the 3×3 pixel trigger pattern to perform a clean-label attack.
+2) Trafﬁc signs: For the trafﬁc sign classiﬁcation task, we selected 16 different classes from the GTSRB dataset, namely, the most representative classes in the dataset, including 6 speed-limit, 3 prohibition, 3 danger, and 4 mandatory signs. Each class has 1200 colour images with size 28 × 28. The model architecture used for training is based on ResNet18 [43]. The feature representation is extracted from the 17-th layer, that is, before the FC layer, after an average pooling layer and ReLu activation. With regard to the attack, we considered the corrupted-label scenario. As triggering pattern, we considered a horizontal sinusoidal pattern, deﬁned as υ(i, j) = ∆ sin(2πjf /W ), 1 ≤ i ≤ H, 1 ≤ j ≤ W , where H × W is the size of input image. The parameters ∆ and f are used to control the strength and frequency of the trigger. In our experiment, we set ∆ = 20 and f = 6. As before, for a given α, the network is trained on 16 poisoned datasets, each time considering a different target classes. .
+
+3) Fashion clothes: Fashion-MNIST dataset includes 10 classes of grey-level cloth images, each class consisting of 6000 images of size 28×28. The model architecture used for the classiﬁcation is based on AlexNet [44]. The representation used by the backdoor detector is extracted from the 5-th layer, at the output of the ReLu activation layer before the ﬁrst FC layer. With regard to the attack, the poisoned samples are generated by performing the attack in a clean-label setting. A ramp trigger with ∆ = 256 is used to implement the attack. Once again, for each choice of α, the backdoor attack is repeated 10 times, each time considering a different target class.
+For all the classiﬁcation tasks, the benign validation dataset Dval is obtained by randomly selecting 100 samples from all the classes in the dataset.
+
+C. Setting of defence parameters
+
+To implement the CCA-UD defence, we have to set the following parameters: the reduced dimension d for the clustering, the parameters of the DBSCAN algorithm, namely minP ts and , and ﬁnally the threshold θ used by the clustering poisoning detection module. In our experiments, we set d = 2, minP ts = 20 and = 0.8. This is the setting that, according to our experiments, achieves the best performance
+with the minimum complexity for the clustering algorithm (being d = 2). The effect of these parameters on the result of clustering and the detection performance is evaluated by the
+ablation study described in Section VI-A. With regard to θ, as mentioned before, AC, CI and CCA-
+UD involve the setting of a threshold for poisoning detection.
+For a fair comparison, we set the threshold in the same way for all the methods. In particular, we set θ by ﬁxing the false positive rate. In general a value of θ results in different F P R rates for different classes. To avoid setting a different threshold for each class, then, we ﬁxed it by setting the average F P R. In fact, setting the average F P R exactly may not be feasible, so we chose the threshold in such a way to minimize the
+distance from the target rate. Formally, by setting the target false positive rate to 0.05, the threshold θ∗ is determined as:
+
+θ∗
+
+= arg min
+θ
+
+0.05 − F P R(Dval)
+
+.
+
+(10)
+
+VI. EXPERIMENTAL RESULTS
+In this section we report the results of the experiments we have carried out to evaluate the effectiveness of CCA-UD.
+
+A. Ablation study
+We start the experimental analysis with an ablation study investigating the effect of the three main hyperparameters of CCA-UD, namely d (regarding UMAP), and minP ts and (for DBSCAN) on the effectiveness of the method. Based on this analysis, in all subsequent experiments we set d = 2, minP ts = 20 and = 0.8.
+The inﬂuence of each parameter on the clustering result and the detection performance can be assessed by looking at Table I. The results refer to the case of MNIST classiﬁcation, with backdoor poisoning performed by using a 3×3 pixel
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+9
+
+TABLE I: Ablation study on the three hyperparameters of CCA-UD. F P R and T P R for all cases are computed by letting θ = θ∗ as stated in Eq. (10). K and ζ are, respectively, the average number of clusters and the average fraction of outliers
+identiﬁed by DBSCAN.
+
+Hyperparameters
+
+BCB results
+
+BCP results
+
+P C results
+
+d minP ts
+
+(K, ζ)
+
+F P R(BCB )
+
+(K, ζ)
+
+F P R(BCP )
+
+(K, ζ)
+
+T P R(P C) F P R(P C) AU C
+
+S1 2
+
+20
+
+0.4 (2.9, 0.005)
+
+0.050
+
+(4.3, 0.008)
+
+0.073
+
+(9.7, 0.003)
+
+1.000
+
+0.046
+
+0.998
+
+S2 4
+
+20
+
+0.4 (30.4, 0.097)
+
+0.044
+
+(22.6, 0.060)
+
+0.027
+
+(12.9, 0.012)
+
+0.432
+
+0.006
+
+0.989
+
+S3 8
+
+20
+
+0.4 (37.4, 0.142)
+
+0.066
+
+(23.7, 0.076)
+
+0.037
+
+(13.4, 0.012)
+
+0.448
+
+0.007
+
+0.990
+
+S4 10
+
+20
+
+0.4 (39.3, 0.153)
+
+0.057
+
+(24.5, 0.085)
+
+0.049
+
+(13.8, 0.013)
+
+0.501
+
+0.010
+
+0.987
+
+S5 2
+
+3
+
+0.4 (2.0, 0.000)
+
+0.050
+
+(2.2, 0.000)
+
+0.051
+
+(8.0, 0.000)
+
+1.000
+
+0.050
+
+1.000
+
+S6 2
+
+10
+
+0.4 (2.3, 0.001)
+
+0.050
+
+(2.6, 0.002)
+
+0.050
+
+(8.5, 0.001)
+
+1.000
+
+0.050
+
+0.999
+
+S7 2
+
+20
+
+0.8 (1.3, 0.000)
+
+0.050
+
+(1.6, 0.000)
+
+0.050
+
+(6.2, 0.000)
+
+1.000
+
+0.050
+
+1.000
+
+S8 2
+
+20
+
+1.0 (1.3, 0.000)
+
+0.049
+
+(1.6, 0.000)
+
+0.050
+
+(4.6, 0.000)
+
+1.000
+
+0.049
+
+1.000
+
+S9 2
+
+20
+
+10.0 (1.0, 0.000)
+
+0.050
+
+(1.0, 0.000)
+
+0.050
+
+(1.0, 0.000)
+
+1.000
+
+1.000
+
+0.500
+
+S10 10
+
+5
+
+0.4 (15.5, 0.004)
+
+0.049
+
+(9.5, 0.002)
+
+0.068
+
+(11.9, 0.001)
+
+1.000
+
+0.046
+
+0.999
+
+S11 10
+
+10
+
+0.4 (17.8, 0.020)
+
+0.052
+
+(11.7, 0.012)
+
+0.077
+
+(10.6, 0.004)
+
+1.000
+
+0.030
+
+0.996
+
+S12 10
+
+20
+
+0.2 (29.2, 0.883)
+
+0.049
+
+(60.7, 0.732)
+
+0.045
+
+(111.3, 0.399)
+
+0.053
+
+0.031
+
+0.612
+
+S13 10
+
+20
+
+0.6 (2.0, 0.008)
+
+0.046
+
+(3.0, 0.004)
+
+0.042
+
+(7.6, 0.001)
+
+1.000
+
+0.042
+
+0.999
+
+S14 10
+
+20
+
+1.0 (1.2, 0.000)
+
+0.050
+
+(1.5, 0.000)
+
+0.050
+
+(6.2, 0.000)
+
+1.000
+
+0.049
+
+1.000
+
+S15 10
+
+20
+
+3.0 (1.1, 0.000)
+
+0.050
+
+(1.5, 0.000)
+
+0.050
+
+(3.9, 0.000)
+
+1.000
+
+0.050
+
+1.000
+
+S16 10
+
+20
+
+10.0 (1.0, 0.000)
+
+0.050
+
+(1.0, 0.000)
+
+0.050
+
+(1.0, 0.000)
+
+1.000
+
+1.000
+
+0.500
+
+trigger pattern with label corruption. Similar considerations can be drawn in the other settings. The results in the table have been obtained by letting θ = θ as stated in Eq. (10). To start with, we observe that when utilising θ∗ in BCB and BCP cases, the F P R values is close to 0.05 for all the settings, while in the P C case F P R is close to or less than 0.05 for all settings except for S9 and S16, whes benign and poisoned samples collapse into a single cluster. In addition to T P R and F P R, the table shows the average number of clusters (K) and the average outlier ratio (ζ) identiﬁed by DBSCAN.
+From the ﬁrst group of rows (S1-S4), we see that for a given setting of minP ts and , increasing d leads to a larger average number of clusters and a larger fraction of outliers, as the DBSCAN algorithm results in a higher number of densely-connected regions. A similar behaviour is observed by increasing minP ts or decreasing for a given d (second and third group of rows in the table). Expectedly, when is too large, e.g. 10, DBSCAN always results in one cluster thus failing to identify the poisoned samples. Based on the result in Table I, the settings S7 (d = 2, minP ts = 20,
+= 0.8) and S15 (d = 10, minP ts = 20, = 3) yield the best performance, the former having lower computational complexity, because of the lower dimension used to cluster the samples in the feature space (d = 2 instead of 10).
+B. Threshold setting
+The thresholds θ∗ obtained following the approach detailed in Section V-C for AC and CI and CCA-UD, are reported in Table II for the three different classiﬁcation tasks considered in our experiments. Given that the threshold is set by relying on the validation dataset, it is necessary to verify that the target false positive rate (0.05 in our case) is also obtained on the test dataset. An excerpt of such results is shown in Table IV by referring to MNIST task (a similar behaviour is observed for the other classiﬁcation tasks).
+Our experiments reveal that, for AC and CI, the threshold determined via Eq. (10) does not lead to a good operating point when used on the test dataset. In particular, while for CCA-UD, the threshold θ∗ set on the validation dataset yields a similar F P R (around 0.05) in the BCB, BCP and P C
+
+TABLE II: Values of θ∗ obtained for the various classiﬁcation tasks.
+
+Method AC CI
+CCA-UD
+
+MNIST 0.335 3.018 0.950
+
+Trafﬁc signs 0.404 1.673 0.950
+
+Fashion clothes 0.301 4.738 0.950
+
+cases, this is not true for AC and CI, for which F P R(BCB), F P R(BCP ) and F P R(P C) are often smaller than 0.05, reaching 0 in many cases. This leads to a poor T P R(P C). In particular, with AC, when α > θ∗, both clusters are classiﬁed as benign, and then T P Rα(P C) = F P Rα(P C) = 0, even when the method would, in principle, be able to provide a perfect discrimination (AU Cα ≈ 1). The difﬁculty in setting the threshold for AC and CI is also evident from the plots in Fig. 6, that report the F P R and T P R values averaged also on α, for different values of the threshold θ. From these plots,
+we immediately see that a threshold that works in all the cases
+can never be found for AC and CI.
+Due to the difﬁculties encountered to set the detection threshold for AC and CI10, the results at θ∗ for these methods
+are not reported in the other cases, that is, for trafﬁc sign
+and fashion clothes classiﬁcation, for which we report only the AU Cα scores. Note that the possibility to set a unique threshold on a benign dataset that also works on poisoned
+datasets is very important for the practical applicability of a
+defence. Based on our results, CCA-UD has this remarkable
+property.
+
+C. Results on MNIST
+In this section, we evaluate the performance of CCA-UD against the three types of backdoor attacks, namely, 3×3 corrupted, ramp corrupted, and 3×3 clean. Such performance as compared to those obtained by AC and CI. In Fig. 6, in each row, the three ﬁgures report the average performance of AC, CI and CCA-UD. The values of F P R(BCB), F P R(BCP ), T P R(P C) and F P R(P C) are reported for each method, as a function of the detection threshold θ. The behaviour of
+10Note that the problem of threshold setting is not addressed in the original papers, since different threshold are used in the various cases.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+10
+
+TABLE III: AU C scores of three methods in the three different attacks
+
+Method AC CI
+CCA-UD
+
+3×3 corrupted 0.728 0.964 0.994
+
+Ramp corrupted 0.733 0.178 0.996
+
+3×3 clean 0.785 0.488 0.981
+
+F P R(Dval), which is utilised to determine the threshold θ∗ (at 0.05 of F P R(Dval)), is also reported. The position of θ∗ is indicated by a vertical dotted line.
+By observing the ﬁgure, we see that CCA-UD outperforms by far the other two methods in all the settings. In the ﬁrst setting, we achieve T P R(P C) and F P R(P C) equal to 0.983 and 0.051 at the optimal threshold θ∗, with F P R(BCB) = 0.051 and F P R(BCP ) = 0.050. Instead, the performance achieved by AC and CI at their optimal threshold are very poor. Similar results are achieved for the second and third settings. In particular, for the second attack, CCA-UD achieves T P R(P C) and F P R(P C) equal to ( 0.975, 0.050) at θ∗, and (0.966, 0.050) for the third one.
+For a poisoned dataset, the AU C values obtained in the three settings are provided in Table III. From these results, we argue that CI has good discriminating capability (with an AUC only slightly lower than CCA-UD) against the ﬁrst attack, but fails to defend against the other two. This is an expected behaviour since CI does not work when the triggering pattern is robust against average ﬁltering, as it is the case of the ramp signal considered in the second attack, or with cleanlabel attacks, as it is the last setting.
+Table IV shows the results obtained for different values of the poisoning ratio α for the three different attacks. The values of F P R and T P R have been obtained by letting θ = θ∗.
+For the clean-label case, due to the difﬁculty of developing a successful attack [12], [27], [28], the backdoor can be successfully injected in the model only when α is large enough and, in any case, a successful attack could not always be obtained in the 10 repetitions. For this reason, in the third table, we report the number of successfully attacked classes (cnt) with different poisoning ratios. Upon inspection of Table IV, we observe that:
+• With regard to AC, the behaviour is similar under the three attack scenarios. Good results are achieved for intermediate values of α, namely in the [0.2, 0.3] range. When α < 0.134, instead, AU Cα of AC is smaller than 0.786, and close to 0.5 for small α. In particular, AC cannot handle the backdoor attacks for which the poisoning ratio is smaller than 0.1. Moreover, when α > 0.5, AU Cα goes to zero, as benign samples are judged as poisoned and vice-versa. Finally, by comparing the AU Cα values in Fig. IVa and Fig. IVc, we see that AC achieves better performance against the corrupted-label attack than in the clean-label case.
+• With regard to CI, the detection performance achieved in the ﬁrst attack scenario (3×3 corrupted) are good for all the values of α, with AU Cα larger than 0.96 in most of the cases (with the exception of the smallest α, for which AU Cα = 0.876), showing that CI can effectively defend against the backdoor attack in this setting, for every attack poisoning ratio. However, as expected, CI fails in the
+
+other settings, with AU Cα lower than 0.5 in all the cases, conﬁrming the limitations mentioned in Section III-A2. • Regarding CCA-UD, good results are achieved in all thecases and for every value of α, with a perfect or nearly perfect AU Cαin most of the cases. Moreover, by letting θ = θ∗, a very good T P Rα(P C) is obtained, larger than 0.95 in almost all the cases, with F P Rα(BCP ) and F P Rα(P C) around 0.05. Overall, the tables prove the universality of CCA-UD that works very well regardless of the speciﬁc attack setting and regardless of the value of α. Note, since CCA-UD achieves a larger AU Cα than AC and CI, CCA-UD outperforms AC and CI not only when θ = θ∗ but also when θ is set adaptively.
+Finally, these results show that CCA-UD can effectively defend against both corrupted and clean-label attacks, thus conﬁrming that the strategy used to detect poisoned clusters exploits a general misclassiﬁcation behaviour present in both corrupted- and clean-label attacks.
+D. Results on Trafﬁc Signs
+Fig. 7a-7c show the average performance of AC, CI, and CCA-UD on the trafﬁc signs task. Similar considerations to the MNIST case can be made. CCA-UD achieves very good average performance at the operating point given by θ∗, where T P R(P C) and F P R(P C) are ( 0.965, 0.058) (with F P R(BCB) = F P R(BCB) ≈ 0.08), while for AC and CI a threshold that works well on the average can not be found. In the case of a poisoned dataset, the average AUC of the detection AU C is equal to 0.897, 0.958, 0.993 for AC, CI, and CCA-UD, respectively.
+We observe that CI gets a good AU C, too. In fact, in this case, given that the size of the input image is 28×28, the triggering pattern, namely the sinusoidal signal can be effectively removed by a 5 × 5 average ﬁlter.
+The results obtained for various α are reported in Table Va. As it can be seen, CCA-UD gets very good performance in terms of T P Rα(P C) and F P Rα(P C) measured at θ = θ∗ in all the cases. The AU Cα is also larger than that achieved by AC and CI for all values of α. As observed before, while CI is relatively insensitive to α, the performance of AC drop when α < 0.1 or α > 0.5.
+E. Results on Fashion Clothes
+Fig. 7d-7f report the results obtained by AC, CI, and CCAUD on the fashion clothes task. Once again, the performance achieved by CCA-UD are largely superior to those achieved by AC and CI. In particular, by looking at Fig. 7d-7f, CCA-UD achieves T P R(P C) and F P R(P C) equal to (1.000, 0.053), with F P R(BCB) = F P R(BCP ) ≈ 0.05. Regarding the AUC scores, AU C of AC, CI, and CCA-UD are 0.900, 0.106, 0.997 respectively. Since the attack is carried out in a cleanlabel modality, the poor performance of CI were expected. The results for various α, reported in Table Vb, conﬁrm the same behaviour, with CCA-UD getting very good performance in all the cases, always overcoming the other two methods.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+11
+
+(a) AC in 3×3 corrupted
+
+(b) CI in 3×3 corrupted
+
+(c) CCA-UD in 3×3 corrupted
+
+(d) AC in ramp corrupted
+
+(e) CI in ramp corrupted
+
+(f) CCA-UD in ramp corrupted
+
+(g) AC in 3×3 clean
+
+(h) CI in 3×3 clean
+
+(i) CCA-UD in 3×3 clean
+
+Fig. 6: Average performance of AC and CI, and CCA-UD for different values of the threshold against the three types of
+backdoor attacks implemented in the case of MNIST classiﬁcation. From top to bottom the plots refer to 3×3 corrupted in (a)-(c), ramp corrupted in (d)-(f), and 3×3 clean in (g)-(i). From left to right we report the performance of AC, CI and CCA-UD. The position of θ∗ is indicated by a vertical dotted line.
+
+TABLE IV: Performance of AC, CI and CCA-UD for various poisoning ratios α, against the three types of backdoor attacks for MNIST classiﬁcation, The F P R and T P R values are computed at θ = θ∗. In the 3 × 3 table cnt indicates the number of
+successful attacks in 10 repetitions.
+
+α
+0.025 0.050 0.096 0.134 0.186 0.258 0.359 0.550
+α
+0.035 0.050 0.096 0.134 0.186 0.258 0.359 0.550
+
+F P Rα (BCP )
+0.025 0.055 0.000 0.000 0.000 0.000 0.000 0.000
+F P Rα (BCP )
+0.000 0.024 0.000 0.024 0.000 0.025 0.025 0.000
+
+AC
+T P Rα (P C)
+0.000 0.099 0.395 0.792 0.994 0.993 0.000 0.000
+AC
+T P Rα (P C)
+0.050 0.090 0.400 0.798 0.992 0.999 0.000 0.000
+
+F P Rα (P C)
+0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000
+F P Rα (P C)
+0.024 0.028 0.000 0.001 0.003 0.000 0.000 0.000
+
+AU Cα
+0.563 0.628 0.757 0.958 0.997 0.997 0.998 0.001
+AU Cα
+0.593 0.593 0.786 0.962 0.995 0.999 0.999 0.002
+
+F P Rα(BCP )
+0.012 0.005 0.005 0.009 0.000 0.014 0.000 0.000
+
+CI
+T P Rα (P C)
+0.324 0.581 0.654 0.559 0.577 0.540 0.571 0.829
+
+F P Rα (P C)
+0.022 0.001 0.000 0.002 0.001 0.070 0.005 0.000
+
+(a) 3×3 corrupted
+
+CI
+
+F P Rα(BCP )
+0.009 0.000 0.003 0.019 0.107 0.000 0.021 0.004
+
+T P Rα (P C)
+0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000
+
+F P Rα (P C)
+0.008 0.000 0.000 0.000 0.000 0.000 0.000 0.000
+
+AU Cα
+0.876 0.977 0.996 0.990 0.985 0.961 0.964 0.953
+AU Cα
+0.407 0.119 0.216 0.142 0.179 0.088 0.144 0.135
+
+F P Rα (BCP )
+0.050 0.050 0.050 0.051 0.050 0.050 0.050 0.050
+
+CCA-UD
+
+T P Rα (P C)
+0.908 0.989 0.999 0.999 1.000 1.000 1.000 1.000
+
+F P Rα (P C)
+0.051 0.050 0.050 0.050 0.050 0.050 0.050 0.050
+
+AU Cα
+0.949 0.994 0.999 1.000 1.000 1.000 1.000 1.000
+
+F P Rα (BCP )
+0.051 0.050 0.050 0.050 0.051 0.050 0.051 0.050
+
+CCA-UD
+
+T P Rα (P C)
+0.871 0.914 0.989 0.999 1.000 1.000 1.000 1.000
+
+F P Rα (P C)
+0.050 0.050 0.050 0.050 0.050 0.050 0.050 0.050
+
+AU Cα
+0.966 0.998 0.998 0.998 1.000 1.000 1.000 1.000
+
+(b) Ramp corrupted
+
+AC
+
+CI
+
+CCA-UD
+
+α
+
+cnt
+
+F P Rα (BCP )
+
+T P Rα(P C)
+
+F P Rα(P C)
+
+AU Cα
+
+F P Rα (BCP )
+
+T P Rα (P C)
+
+F P Rα (P C)
+
+AU Cα
+
+F P Rα(BCP )
+
+T P Rα (P C)
+
+F P Rα (P C)
+
+AU Cα
+
+0.050 2
+
+0.000
+
+0.000
+
+0.000
+
+0.441
+
+0.000
+
+0.683
+
+0.835
+
+0.438
+
+0.051
+
+0.642
+
+0.050
+
+0.809
+
+0.069 3
+
+0.000
+
+0.000
+
+0.000
+
+0.533
+
+0.000
+
+0.667
+
+0.667
+
+0.296
+
+0.050
+
+0.952
+
+0.050
+
+0.972
+
+0.096 3
+
+0.000
+
+0.000
+
+0.000
+
+0.528
+
+0.000
+
+0.333
+
+0.333
+
+0.595
+
+0.050
+
+0.951
+
+0.050
+
+0.972
+
+0.134 3
+
+0.000
+
+0.000
+
+0.000
+
+0.610
+
+0.000
+
+0.667
+
+0.667
+
+0.539
+
+0.050
+
+0.975
+
+0.050
+
+0.987
+
+0.186 5
+
+0.000
+
+0.384
+
+0.003
+
+0.746
+
+0.000
+
+0.600
+
+0.600
+
+0.471
+
+0.051
+
+0.982
+
+0.050
+
+0.991
+
+0.258 5
+
+0.000
+
+0.929
+
+0.011
+
+0.959
+
+0.000
+
+0.601
+
+0.644
+
+0.516
+
+0.050
+
+0.994
+
+0.051
+
+0.996
+
+0.359 5
+
+0.000
+
+0.315
+
+0.000
+
+0.975
+
+0.000
+
+0.206
+
+0.213
+
+0.437
+
+0.050
+
+0.993
+
+0.050
+
+0.996
+
+0.450 5
+
+0.000
+
+0.000
+
+0.000
+
+0.969
+
+0.009
+
+0.729
+
+0.786
+
+0.554
+
+0.050
+
+0.997
+
+0.050
+
+0.998
+
+(c) 3×3 clean
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+12
+
+(a) AC in trafﬁc signs task
+
+(b) CI in trafﬁc signs task
+
+(c) CCA-UD in trafﬁc signs task
+
+(d) AC in fashion clothes task
+
+(e) CI in fashion clothes task
+
+(f) CCA-UD in fashion clothes task
+
+Fig. 7: Average performance of AC, CI, and CCA-UD for different values of θ for the trafﬁc signs and fashion clothes task. The vertical dotted line indicates the position of θ∗ for the various methods.
+
+TABLE V: Performance of AC, CI, and CCA-UD for various
+poisoning ratios for the trafﬁc sign and fashion cloth task. The F P R and T P R values are computed at θ = θ∗. Since for AC and CI it is not possible to ﬁnd a unique value of θ working in all conditions, we report only the AU C values.
+
+AC
+
+CI
+
+CCA-UD
+
+α
+
+cnt
+
+AU Cα
+
+AU Cα
+
+AU Cα
+
+F P Rα (BCP )
+
+T P Rα(P C)
+
+F P Rα(P C)
+
+0.050 9 0.793 0.923 0.983
+
+0.073
+
+0.946
+
+0.061
+
+0.096 9 0.850 0.928 0.991
+
+0.058
+
+0.998
+
+0.059
+
+0.134 9 0.949 0.959 0.992
+
+0.057
+
+0.998
+
+0.057
+
+0.186 10 0.958 0.965 0.993
+
+0.064
+
+0.999
+
+0.056
+
+0.359 13 0.946 0.965 0.996
+
+0.086
+
+0.985
+
+0.054
+
+0.450 14 0.917 0.965 0.994
+
+0.070
+
+0.980
+
+0.055
+
+0.550 15 0.869 0.996 0.999
+
+0.059
+
+0.999
+
+0.051
+
+(a) Trafﬁc signs
+
+AC
+
+CI
+
+CCA-UD
+
+α
+
+cnt
+
+AU Cα
+
+AU Cα
+
+AU Cα
+
+F P Rα (BCP )
+
+T P Rα(P C)
+
+F P Rα(P C)
+
+0.069 3 0.618 0.056 0.998
+
+0.053
+
+1.000
+
+0.052
+
+0.096 3 0.513 0.341 0.995
+
+0.054
+
+1.000
+
+0.056
+
+0.134 3 0.940 0.087 0.998
+
+0.059
+
+1.000
+
+0.053
+
+0.186 4 1.000 0.037 0.998
+
+0.054
+
+1.000
+
+0.055
+
+0.258 5 1.000 0.083 0.996
+
+0.055
+
+1.000
+
+0.057
+
+0.359 5 1.000 0.015 0.998
+
+0.056
+
+1.000
+
+0.052
+
+0.450 5 1.000 0.174 1.000
+
+0.055
+
+1.000
+
+0.050
+
+(b) Fashion clothes
+
+VII. CONCLUDING REMARKS
+We have proposed a universal backdoor detection method, called CCA-UD, aiming at revealing the possible presence of a backdoor inside a model and identify the poisoned samples by analysing the training dataset. CCA-UD relies on DBSCAN clustering and on a new strategy for the detection of poisoned clusters based on the computation of clusters’ centroids. The capability of the centroids’ features to cause a misclassiﬁcation of benign samples is exploited to decide whether a cluster is poisoned or not. We evaluated the effectiveness of CCA-UD on a wide variety of classiﬁcation tasks and attack scenarios. The results conﬁrm that the method can work regardless of the corruption strategy (corrupted and clean label setting) and the type of trigger used by the attacker (local or global pattern). Moreover, the method is effective regardless of the poisoning ratio used by the attacker, that can be either very small or even larger than 0.5. Furthermore, we proved that the performance achieved by CCA-UD are always superior to those achieved by the existing methods, also when these methods are applied
+
+in a scenario that meets their operating requirements.
+Future work will be devoted to the analysis of the behaviour of the proposed method against multiple triggers attacks, that is when multiple triggers are used to poison the samples, possibly to induce more than one malicious behaviour inside the network. The capability of the method to defend against backdoor attacks in application scenarios beyond image classiﬁcation, is also worth investigation.
+REFERENCES
+[1] I. J. Goodfellow, J. Shlens, and C. Szegedy, “Explaining and harnessing adversarial examples,” in 3rd International Conference on Learning Representations, ICLR 2015, San Diego, CA, USA, May 7-9, 2015, Conference Track Proceedings, Y. Bengio and Y. LeCun, Eds., 2015.
+[2] A. Kurakin, I. J. Goodfellow, and S. Bengio, “Adversarial examples in the physical world,” in 5th International Conference on Learning Representations, ICLR 2017, Toulon, France, April 24-26, 2017, Workshop Track Proceedings. OpenReview.net, 2017.
+[3] A. Kurakin, I. Goodfellow, and S. Bengio, “Adversarial machine learning at scale,” arXiv preprint arXiv:1611.01236, 2016.
+[4] B. Biggio, B. Nelson, and P. Laskov, “Poisoning attacks against support vector machines,” in Proceedings of the 29th International Conference on Machine Learning, ICML 2012, Edinburgh, Scotland, UK, June 26 - July 1, 2012. icml.cc / Omnipress, 2012.
+[5] S. Weerasinghe, T. Alpcan, S. M. Erfani, and C. Leckie, “Defending support vector machines against data poisoning attacks,” IEEE Trans. Inf. Forensics Secur., vol. 16, pp. 2566–2578, 2021.
+[6] W. Guo, B. Tondi, and M. Barni, “A master key backdoor for universal impersonation attack against dnn-based face veriﬁcation,” Pattern Recognit. Lett., vol. 144, pp. 61–67, 2021.
+[7] X. Chen, C. Liu, B. Li, K. Lu, and D. Song, “Targeted backdoor attacks on deep learning systems using data poisoning,” CoRR, vol. abs/1712.05526, 2017.
+[8] W. Guo, B. Tondi, and M. Barni, “A temporal chrominance trigger for clean-label backdoor attack against anti-spoof rebroadcast detection,” CoRR, vol. abs/2206.01102, 2022.
+[9] T. Gu, B. Dolan-Gavitt, and S. Garg, “Badnets: Identifying vulnerabilities in the machine learning model supply chain,” CoRR, vol. abs/1708.06733, 2017.
+[10] W. Guo, B. Tondi, and M. Barni, “An overview of backdoor attacks against deep neural networks and possible defences,” IEEE Open Journal of Signal Processing, vol. 3, pp. 261–287, 2022.
+[11] A. Turner, D. Tsipras, and A. Madry, “Label-consistent backdoor attacks,” arXiv preprint arXiv:1912.02771, 2019.
+[12] M. Barni, K. Kallas, and B. Tondi, “A new backdoor attack in CNNS by training set corruption without label poisoning,” in 2019 IEEE International Conference on Image Processing, ICIP 2019, Taipei, Taiwan, September 22-25, 2019. IEEE, 2019, pp. 101–105.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+13
+
+[13] B. Chen, W. Carvalho, N. Baracaldo, H. Ludwig, B. Edwards, T. Lee, I. M. Molloy, and B. Srivastava, “Detecting backdoor attacks on deep neural networks by activation clustering,” in Workshop on Artiﬁcial Intelligence Safety 2019 co-located with the Thirty-Third AAAI Conference on Artiﬁcial Intelligence 2019 (AAAI-19), Honolulu, Hawaii, January 27, 2019, ser. CEUR Workshop Proceedings, H. Espinoza, S. O´ . hE´ igeartaigh, X. Huang, J. Herna´ndez-Orallo, and M. Castillo-Effen, Eds., vol. 2301. CEUR-WS.org, 2019.
+[14] J. Yadav and M. Sharma, “A review of k-mean algorithm,” Int. J. Eng. Trends Technol, vol. 4, no. 7, pp. 2972–2976, 2013.
+[15] Z. Xiang, D. J. Miller, and G. Kesidis, “A benchmark study of backdoor data poisoning defenses for deep neural network classiﬁers and A novel defense,” in 29th IEEE International Workshop on Machine Learning for Signal Processing, MLSP 2019, Pittsburgh, PA, USA, October 1316, 2019. IEEE, 2019, pp. 1–6.
+[16] S. R. Bond, A. Hoefﬂer, and J. R. Temple, “Gmm estimation of empirical growth models,” Available at SSRN 290522, 2001.
+[17] A. A. Neath and J. E. Cavanaugh, “The bayesian information criterion: background, derivation, and applications,” Wiley Interdisciplinary Reviews: Computational Statistics, vol. 4, no. 2, pp. 199–203, 2012.
+[18] B. Tran, J. Li, and A. Madry, “Spectral signatures in backdoor attacks,” in Advances in Neural Information Processing Systems 31: Annual Conference on Neural Information Processing Systems 2018, NeurIPS 2018, December 3-8, 2018, Montre´al, Canada, S. Bengio, H. M. Wallach, H. Larochelle, K. Grauman, N. Cesa-Bianchi, and R. Garnett, Eds., 2018, pp. 8011–8021.
+[19] J. Hayase, W. Kong, R. Somani, and S. Oh, “SPECTRE: defending against backdoor attacks using robust statistics,” CoRR, vol. abs/2104.11315, 2021. [Online]. Available: https: //arxiv.org/abs/2104.11315
+[20] H. Abdi, “Singular value decomposition (svd) and generalized singular value decomposition,” Encyclopedia of measurement and statistics, pp. 907–912, 2007.
+[21] S. Shan, A. N. Bhagoji, H. Zheng, and B. Y. Zhao, “Poison forensics: Traceback of data poisoning attacks in neural networks,” in 31st USENIX Security Symposium, USENIX Security 2022, Boston, MA, USA, August 10-12, 2022, K. R. B. Butler and K. Thomas, Eds. USENIX Association, 2022, pp. 3575–3592.
+[22] N. Peri, N. Gupta, W. R. Huang, L. Fowl, C. Zhu, S. Feizi, T. Goldstein, and J. P. Dickerson, “Deep k-nn defense against clean-label data poisoning attacks,” in Computer Vision - ECCV 2020 Workshops Glasgow, UK, August 23-28, 2020, Proceedings, Part I, ser. Lecture Notes in Computer Science, A. Bartoli and A. Fusiello, Eds., vol. 12535. Springer, 2020, pp. 55–70.
+[23] A. Shafahi, W. R. Huang, M. Najibi, O. Suciu, C. Studer, T. Dumitras, and T. Goldstein, “Poison frogs! targeted clean-label poisoning attacks on neural networks,” in Advances in Neural Information Processing Systems 31: Annual Conference on Neural Information Processing Systems 2018, NeurIPS 2018, December 3-8, 2018, Montre´al, Canada, S. Bengio, H. M. Wallach, H. Larochelle, K. Grauman, N. Cesa-Bianchi, and R. Garnett, Eds., 2018, pp. 6106–6116.
+[24] D. Tang, X. Wang, H. Tang, and K. Zhang, “Demon in the variant: Statistical analysis of dnns for robust backdoor contamination detection,” in 30th USENIX Security Symposium, USENIX Security 2021, August 11-13, 2021, M. Bailey and R. Greenstadt, Eds. USENIX Association, 2021, pp. 1541–1558.
+[25] T. K. Moon, “The expectation-maximization algorithm,” IEEE Signal processing magazine, vol. 13, no. 6, pp. 47–60, 1996.
+[26] M. Ester, H. Kriegel, J. Sander, and X. Xu, “A density-based algorithm for discovering clusters in large spatial databases with noise,” in Proceedings of the Second International Conference on Knowledge Discovery and Data Mining (KDD-96), Portland, Oregon, USA, E. Simoudis, J. Han, and U. M. Fayyad, Eds. AAAI Press, 1996, pp. 226–231.
+[27] S. Zhao, X. Ma, X. Zheng, J. Bailey, J. Chen, and Y.-G. Jiang, “Cleanlabel backdoor attacks on video recognition models,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2020, pp. 14 443–14 452.
+[28] W. Guo, B. Tondi, and M. Barni, “A temporal chrominance trigger for clean-label backdoor attack against anti-spoof rebroadcast detection,” arXiv preprint arXiv:2206.01102, 2022.
+[29] Y. LeCun, Y. Bengio, and G. Hinton, “Deep learning,” nature, vol. 521, no. 7553, pp. 436–444, 2015.
+[30] S. Wold, K. Esbensen, and P. Geladi, “Principal component analysis,” Chemometrics and intelligent laboratory systems, vol. 2, no. 1-3, pp. 37–52, 1987.
+[31] A. Gupta and N. Shekokar, “A novel k-means l-layer algorithm for uneven clustering in wsn,” in 2017 International Conference on Computer,
+
+Communication and Signal Processing (ICCCSP). IEEE, 2017, pp. 1–6. [32] J. Goldberger, S. Gordon, H. Greenspan et al., “An efﬁcient image similarity measure based on approximations of kl-divergence between two gaussian mixtures.” in ICCV, vol. 3, 2003, pp. 487–493. [33] L. Rokach and O. Maimon, “Clustering methods,” in Data mining and knowledge discovery handbook. Springer, 2005, pp. 321–352. [34] M. Ankerst, M. M. Breunig, H.-P. Kriegel, and J. Sander, “Optics: Ordering points to identify the clustering structure,” ACM Sigmod record, vol. 28, no. 2, pp. 49–60, 1999. [35] R. J. Campello, D. Moulavi, A. Zimek, and J. Sander, “Hierarchical density estimates for data clustering, visualization, and outlier detection,” ACM Transactions on Knowledge Discovery from Data (TKDD), vol. 10, no. 1, pp. 1–51, 2015. [36] L. McInnes, J. Healy, and J. Melville, “Umap: Uniform manifold approximation and projection for dimension reduction,” arXiv preprint arXiv:1802.03426, 2018. [37] M. Ko¨ppen, “The curse of dimensionality,” in 5th online world conference on soft computing in industrial applications (WSC5), vol. 1, 2000, pp. 4–8. [38] B. Wang, Y. Yao, S. Shan, H. Li, B. Viswanath, H. Zheng, and B. Y. Zhao, “Neural cleanse: Identifying and mitigating backdoor attacks in neural networks,” in 2019 IEEE Symposium on Security and Privacy, SP 2019, San Francisco, CA, USA, May 19-23, 2019. IEEE, 2019, pp. 707–723. [39] A. Salem, R. Wen, M. Backes, S. Ma, and Y. Zhang, “Dynamic backdoor attacks against machine learning models,” in 2022 IEEE 7th European Symposium on Security and Privacy (EuroS&P). IEEE, 2022, pp. 703– 718. [40] M. Xue, C. He, J. Wang, and W. Liu, “One-to-n & n-to-one: Two advanced backdoor attacks against deep learning models,” IEEE Transactions on Dependable and Secure Computing, 2020. [41] Y. LeCun and C. Cortes, “MNIST handwritten digit database,” 2010. [Online]. Available: http://yann.lecun.com/exdb/mnist/ [42] Pytorch, “4-layer dnn model,” https://github.com/pytorch/examples/blob/ main/mnist/main.py#L11. [43] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE conference on computer vision and pattern recognition, 2016, pp. 770–778. [44] A. Krizhevsky, “One weird trick for parallelizing convolutional neural networks,” arXiv preprint arXiv:1404.5997, 2014.
+

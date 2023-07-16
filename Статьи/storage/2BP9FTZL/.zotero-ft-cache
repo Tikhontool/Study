@@ -1,0 +1,81 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2306.17441
+
+Help | Advanced Search
+Search
+Computer Science > Computer Vision and Pattern Recognition
+(cs)
+[Submitted on 30 Jun 2023]
+Title: Efficient Backdoor Removal Through Natural Gradient Fine-tuning
+Authors: Nazmul Karim , Abdullah Al Arafat , Umar Khalid , Zhishan Guo , Naznin Rahnavard
+Download a PDF of the paper titled Efficient Backdoor Removal Through Natural Gradient Fine-tuning, by Nazmul Karim and 3 other authors
+Download PDF
+
+    Abstract: The success of a deep neural network (DNN) heavily relies on the details of the training scheme; e.g., training data, architectures, hyper-parameters, etc. Recent backdoor attacks suggest that an adversary can take advantage of such training details and compromise the integrity of a DNN. Our studies show that a backdoor model is usually optimized to a bad local minima, i.e. sharper minima as compared to a benign model. Intuitively, a backdoor model can be purified by reoptimizing the model to a smoother minima through fine-tuning with a few clean validation data. However, fine-tuning all DNN parameters often requires huge computational costs and often results in sub-par clean test performance. To address this concern, we propose a novel backdoor purification technique, Natural Gradient Fine-tuning (NGF), which focuses on removing the backdoor by fine-tuning only one layer. Specifically, NGF utilizes a loss surface geometry-aware optimizer that can successfully overcome the challenge of reaching a smooth minima under a one-layer optimization scenario. To enhance the generalization performance of our proposed method, we introduce a clean data distribution-aware regularizer based on the knowledge of loss surface curvature matrix, i.e., Fisher Information Matrix. Extensive experiments show that the proposed method achieves state-of-the-art performance on a wide range of backdoor defense benchmarks: four different datasets- CIFAR10, GTSRB, Tiny-ImageNet, and ImageNet; 13 recent backdoor attacks, e.g. Blend, Dynamic, WaNet, ISSBA, etc. 
+
+Subjects: 	Computer Vision and Pattern Recognition (cs.CV) ; Image and Video Processing (eess.IV)
+Cite as: 	arXiv:2306.17441 [cs.CV]
+  	(or arXiv:2306.17441v1 [cs.CV] for this version)
+  	https://doi.org/10.48550/arXiv.2306.17441
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Md Nazmul Karim [ view email ]
+[v1] Fri, 30 Jun 2023 07:25:38 UTC (3,315 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Efficient Backdoor Removal Through Natural Gradient Fine-tuning, by Nazmul Karim and 3 other authors
+    PDF
+    Other formats 
+
+Current browse context:
+cs.CV
+< prev   |   next >
+new | recent | 2306
+Change to browse by:
+cs
+eess
+eess.IV
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

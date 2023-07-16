@@ -1,0 +1,80 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2306.15755
+
+Help | Advanced Search
+Search
+Computer Science > Computer Vision and Pattern Recognition
+(cs)
+[Submitted on 27 Jun 2023]
+Title: IMPOSITION: Implicit Backdoor Attack through Scenario Injection
+Authors: Mozhgan Pourkeshavarz , Mohammad Sabokrou , Amir Rasouli
+Download a PDF of the paper titled IMPOSITION: Implicit Backdoor Attack through Scenario Injection, by Mozhgan Pourkeshavarz and 2 other authors
+Download PDF
+
+    Abstract: This paper presents a novel backdoor attack called IMPlicit BackdOor Attack through Scenario InjecTION (IMPOSITION) that does not require direct poisoning of the training data. Instead, the attack leverages a realistic scenario from the training data as a trigger to manipulate the model's output during inference. This type of attack is particularly dangerous as it is stealthy and difficult to detect. The paper focuses on the application of this attack in the context of Autonomous Driving (AD) systems, specifically targeting the trajectory prediction module. To implement the attack, we design a trigger mechanism that mimics a set of cloned behaviors in the driving scene, resulting in a scenario that triggers the attack. The experimental results demonstrate that IMPOSITION is effective in attacking trajectory prediction models while maintaining high performance in untargeted scenarios. Our proposed method highlights the growing importance of research on the trustworthiness of Deep Neural Network (DNN) models, particularly in safety-critical applications. Backdoor attacks pose a significant threat to the safety and reliability of DNN models, and this paper presents a new perspective on backdooring DNNs. The proposed IMPOSITION paradigm and the demonstration of its severity in the context of AD systems are significant contributions of this paper. We highlight the impact of the proposed attacks via empirical studies showing how IMPOSITION can easily compromise the safety of AD systems. 
+
+Subjects: 	Computer Vision and Pattern Recognition (cs.CV)
+Cite as: 	arXiv:2306.15755 [cs.CV]
+  	(or arXiv:2306.15755v1 [cs.CV] for this version)
+  	https://doi.org/10.48550/arXiv.2306.15755
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Mozhgan Pourkeshavarz [ view email ]
+[v1] Tue, 27 Jun 2023 19:15:06 UTC (1,275 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled IMPOSITION: Implicit Backdoor Attack through Scenario Injection, by Mozhgan Pourkeshavarz and 2 other authors
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.CV
+< prev   |   next >
+new | recent | 2306
+Change to browse by:
+cs
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

@@ -1,0 +1,1719 @@
+arXiv:2303.18191v1 [cs.CR] 27 Mar 2023
+
+Detecting Backdoors During the Inference Stage Based on Corruption Robustness Consistency
+Xiaogeng Liu1, 4, 5, 6, 7, Minghui Li3, Haoyu Wang1, 4, 5, 6, 7, Shengshan Hu1, 4, 5, 6, 7 Dengpan Ye9, Hai Jin2, 4, 5, 8, Libing Wu9, Chaowei Xiao10
+1School of Cyber Science and Engineering, Huazhong University of Science and Technology 2School of Computer Science and Technology, Huazhong University of Science and Technology
+3School of Software Engineering, Huazhong University of Science and Technology 4National Engineering Research Center for Big Data Technology and System 5Services Computing Technology and System Lab 6Hubei Key Laboratory of Distributed System Security
+7Hubei Engineering Research Center on Big Data Security 8Cluster and Grid Computing Lab 9School of Cyber Science and Engineering, Wuhan University 10Arizona State University
+{liuxiaogeng, minghuili, wwwwhy, hushengshan, hjin}@hust.edu.cn
+{yedp, wu}@whu.edu.cn xiaocw@asu.edu
+
+Abstract
+Deep neural networks are proven to be vulnerable to backdoor attacks. Detecting the trigger samples during the inference stage, i.e., the test-time trigger sample detection, can prevent the backdoor from being triggered. However, existing detection methods often require the defenders to have high accessibility to victim models, extra clean data, or knowledge about the appearance of backdoor triggers, limiting their practicality.
+In this paper, we propose the test-time corruption robustness consistency evaluation (TeCo)1, a novel test-time trigger sample detection method that only needs the hardlabel outputs of the victim models without any extra information. Our journey begins with the intriguing observation that the backdoor-infected models have similar performance across different image corruptions for the clean images, but perform discrepantly for the trigger samples. Based on this phenomenon, we design TeCo to evaluate testtime robustness consistency by calculating the deviation of severity that leads to predictions’ transition across different corruptions. Extensive experiments demonstrate that compared with state-of-the-art defenses, which even require either certain information about the trigger types or accessibility of clean data, TeCo outperforms them on different backdoor attacks, datasets, and model architectures, enjoying a higher AUROC by 10% and 5 times of stability.
+1https://github.com/CGCL-codes/TeCo
+
+1. Introduction
+Backdoor attacks have been shown to be a threat to deep neural networks (DNNs) [14, 26, 32, 38]. A backdoorinfected DNN will perform normally on clean input data, but output the adversarially desirable target label when the input data are tampered with a special pattern (i.e., the backdoor trigger), which may cause serious safety issues.
+A critical dependency of a successful backdoor attack is that the attacker must provide the samples with backdoor triggers (we call them trigger samples for short hereafter) to the infected models on the inference stage, otherwise, the backdoor will not be triggered. Thus, one way to counter the backdoor attacks is to judge whether the test data have triggers on it, i.e., the test-time trigger sample detection (TTSD) defense2 [5, 12, 42]. This kind of defense can work corporately with other backdoor defenses such as model diagnosis defense [9, 15, 46] or trigger reverse engineering [40, 43], and also provide prior knowledge of the trigger samples in a comprehensive defense pipeline, which can help the down-steam defenses to statistically analyze the backdoor samples and mitigate the backdoor more effectively.
+On the other hand, the TTSD method, especially the black-box TTSD method can also serve as the last line of defense when someone adopts models with unknown credibility and has no authority to get access to the training data or model parameters, this scenario exists widely in the pre-
+2Some paper also call it online backdoor defense [30, 39].
+
+1
+
+vailing machine-learning-as-a-service (MLaaS) [19, 35].
+However, with the development of backdoor attacks, the TTSD defense is facing great challenges. One of the major problems is that different types of triggers have been presented. Unlike the early backdoor attacks whose triggers are universal [3, 14] for all the images and usually conspicuous to human observers, recent works introduced sample-specific triggers [32] and even invisible triggers [8, 21, 26, 33, 49], making it harder to apply pattern statistics or identify out-liners in the image space. Another main problem is the hardship of accomplishing the TTSD defense without extra knowledge such as supplemental data or model accessibility. On the other hand, existing TTSD methods require certain knowledge and assumption. Such assumptions include that the trigger is a specific type [12, 42], the defenders have white-box accessibility to victim models, the predicted soft confidence score of each class [5, 12] or extra clean data for statistical analysis [48], limiting the practicality for real-world applications.
+In this paper, we aim to design a TTSD defense free from these limitations. Specifically, we concentrate on a more practicable black-box hard-label backdoor setting [15] where defenders can only get the final decision from the black-box victim models. In addition, no extra data is accessible and no assumption on trigger appearance is allowed. This setting assumes the defenders’ ability as weak as possible and makes TTSD hard to achieve. To the best of our knowledge, we are the first to focus on the effectiveness of TTSD in this strict setting, and we believe it is desirable to develop TTSD methods working on such a scenario because it is very relevant to the wide deployment of cloud AI service [4, 11] and embedded AI devices [1].
+Since the setting we mentioned above has restricted the accessibility of victim models and the use of extra data, we cannot analyze the information in feature space [30, 39] or train a trigger sample detector [10, 48] like existing works. Fortunately, we find that the backdoor-infected models will present clearly different corruption robustness for trigger samples influenced by different image corruptions, but have relatively similar robustness throughout different image corruptions for clean samples, leaving the clue for trigger sample detection. We call these findings the anomalous corruption robustness consistency of backdoor-infected models and describe them at length in Sec. 3. It is not the first time that image corruptions are discussed in backdoor attacks and defenses [27, 28, 34]. However, previous works fail to explore the correlations between robustness against different corruptions, as discussed in Sec. 3.3.
+Based on our findings above, we propose test-time corruption robustness consistency evaluation (TeCo), a novel test-time trigger sample detection method. At the inference stage of backdoor-infected models, TeCo modifies the input images by commonly used image corruptions [18]
+
+Method
+SentiNet [5] SCan [39] Beatrix [30] NEO3 [42] STRIP [12] FreqDetector [48] TeCo (Ours)
+
+Black-box Access Logits-based Decision-based
+
+No Need of Clean Data
+
+Trigger Aussmptions Universal Sample-specific Invisible
+
+Table 1. The model’s accessibility, the use of clean data, and the assumptions on backdoor triggers required by various TTSD methods. We detail on some most related defenses in Sec. 2. ” ” represents the TTSD method supports this condition.
+with growing severity and estimates the robustness against different types of corruptions from the hard-label outputs of the models. Then, a deviation measurement method is applied to calculate how spread out the results of robustness are. And TeCo makes the final judgment of whether the input images are with triggers based on this metric. Extensive experiments show that compared with the existing advanced TTSD method, TeCo improves AUROC about 10%, has a higher F1-score of 14%, and achieves 5 times of stability against different types of trigger.
+Finally, we take a deep investigation into our observations by constructing adaptive attacks against TeCo. From the results of feature space visualization and quantification of adaptive attacks, we speculate that the anomalous behavior of corruption robustness consistency derives from the widely-used dual-target training in backdoor attacks and it is hard to be avoided by existing trigger types. We hope these findings can shed light on a new perspective of backdoor attacks and defenses for the community. In summary, we make the following contributions:
+• We propose TeCo, a novel test-time trigger sample detection method that only requires the hard-label outputs of the victim models and without extra data or assumptions about trigger types.
+• We discover the fact of anomalous corruption robustness consistency, i.e., the backdoor-infected models have similar performance across different image corruptions for clean images, but not for the trigger samples.
+• We evaluate TeCo on five datasets, four model architectures (including CNNs and ViTs), and seven backdoor attacks with diverse trigger types. All experimental results support that TeCo outperforms state-of-theart methods.
+• We further analyze our observations by constructing adaptive attacks against TeCo. Experiments show that the widely-used dual-target training in backdoor attacks leads to anomalous corruption robustness consistency and it is hard to be avoided by existing backdoor triggers.
+3NEO assumes the backdoor trigger is localized [14] thus will be invalid on distributed or global triggers [3, 8, 32, 48], including universal, sample-sepcific, and invisible ones.
+
+2
+
+2. Related Works
+2.1. Backdoor Attacks
+Badnets [14] is the first work that describes how to embed a backdoor into the DNNs by poisoning part of the training data. Many backdoor attacks have been developed after Badnets. To categorize these works, a reasonable way is to divide them by the triggers’ appearance of these attacks, i.e., the trigger types. The universal trigger is a classical trigger type that is leveraged in many works such as Badnets [14], Blended [3], and Low-frequency [48]. Universal trigger represents that for any input images tampered with the same trigger, the backdoor-infected model will give the predefined predictions. Then, the sample-specific trigger is invented [26,32,37]. Unlike universal triggers, the appearance of sample-specific triggers depends on the images that the trigger attaches. Another research topic in backdoor attacks is the imperceptibility of the backdoor triggers, i.e., the invisible backdoor attacks, such as Wanet [33], LIRA [8], and SSBA [26]. The triggers generated by this kind of attack only lead to subtle modifications in images, and humans can hardly perceive the existence of backdoor triggers. A backdoor attack can meet the sample-specific and invisible conditions simultaneously, for example, the SSBA attack [26].
+2.2. Backdoor Defenses
+In this paper, we mainly discuss the works which use trigger sample detection as a defense method. Since the success of backdoor attacks depends on the existence of trigger samples, detecting those trigger samples in training data or test data is a reasonable way to defend against backdoor attacks. Some detection methods focus on filtering trigger samples in the training stage and attempt to eliminate the backdoor attacks by preventing them from poisoning training data [2, 16, 41]. On the other hand, the test-time trigger sample detection (TTSD) is developed since defenders cannot always control the training process of victim models.
+The first black-box TTSD method is STRIP [12]. STRIP superimposes various clean images on the suspicious samples and evaluates the randomness of the model’s logits outputs. NEO [42] assumes the backdoor trigger is localized and detects the trigger samples by masking random areas of the suspicious samples and repainting them with the dominant color. FreqDetector [48] finds that backdoor triggers often cause artifacts in the frequency space of the suspicious samples, and detects the trigger samples by training a frequency detector on clean images with data augmentations. Some other works assume they have white-box accessibility of the backdoor-infected models and detect the trigger samples by the salient maps [5] or the features of intermediate layers [30, 39].
+Since TTSD methods often make judgments based on
+
+certain statistical patterns of trigger samples, the advances in trigger types mentioned above put great threats to the TTSD methods with no doubt. As shown in Tab. 1, we conclude that existing TTSD methods have relaxed their restrictions of defenders to achieve satisfying performance, leading to incomplete black-box settings, such as the requirement for model accessibility [5, 7, 22, 30, 39], use of clean data [6, 10, 12, 28, 48], and assumptions on specific trigger type [7, 12, 39, 42].
+3. Corruption Robustness Consistency
+Before introducing our black-box trigger sample detection method, we first delineate the important findings that we discover from backdoor-infected models: given a backdoor-infected model, it will show clearly different robustness for trigger samples influenced by different image corruptions. However, for the clean images, the model will show similar robustness against the majority of image corruptions. We stress that these phenomena exist widely in different backdoor-infected models.
+3.1. Corruption Robustness Consistency Test
+We gain our findings by conducting Corruption Robustness Consistency (CRC) test on backdoor-infected models. Given an infected model Cθ, and an image corruption set DKN which has K corruption types and N levels of severity, CRC test computes the clean accuracy (ACC) of the clean images tempered with different image corruptions, or evaluates the attack success rate (ASR) of the trigger samples tempered with different image corruptions. CRC test builds a list LK,N of ACC or ASR, where each element in this list is calculated by:
+ \label {eq:CRC_test} L_{k,d} = \left \{ \begin {aligned} &\frac {1}{I}\sum ^I_{i=1}{\mathb {I}(C_\theta (D^k_n(x_i)=y_i), \text {for clean samples}\ &\frac {1}{J}\sum ^J_{j=1}{\mathb {I}(C_\theta (D^k_n(\hat {x_j})=y_t), \text {for triger samples} \end {aligned} \right .  (1)
+where I is the number of clean images, J is the number of trigger samples, xi represents the clean image, xˆj represents the trigger sample, and Dnk represents the k-th image corruption in the corruption set DKN with severity n. yi is the ground-truth label of xi, yt is the target label that the adversaries want the infected model to predict when the trigger sample is given. I(·) is an indicator function, where I(A) = 1 if and only if A is true.
+3.2. Anomalous CRC of Backdoor-infected Models
+The list LK,N built in CRC test can be used to measure the corruption robustness of backdoor-infected models. We choose the image corruption set described in [18], where the common image corruptions are categorized into 15 classes and each kind of corruptions has 5 levels of severity, then
+
+3
+
+(a) The curves of ASR on trigger samples
+
+(b) The curves of ACC on clean images
+Figure 1. (a): The backdoor-infected model’s attack success rate (ASR) when trigger samples are tempered with different corruptions and levels of severity. (b): The accuracy (ACC) of clean images tempered with different corruptions and levels of severity. The curves separate loosely in (a), while the majority of curves gather more tightly in (b). This indicates that the backdoor-infected models have varied corruption robustness against different image corruptions on trigger samples, but have similar robustness against different image corruptions on clean samples.
+
+(a) ASR of trigger samples
+
+(b) ACC of clean samples
+
+Figure 2. Take input-aware attack infected model as an example.
+
+Compared with clean samples, trigger samples have a more uneven
+
+heat map, which means that the backdoor-infected model are very
+
+robust on certain corruptions but also pretty vulnerable to some
+
+other corruptions.
+
+conduct CRC test on models infected by five backdoor attacks. From the visualization results in Fig. 1(b), the majority of curves are relatively clustered and show a downward trend. We describe this phenomenon as the model has good corruption robustness consistency, because the model performs similarly on different image corruptions.
+However, in Fig. 1(a), the curves are more separated, indicating that the model has contrasting robustness against different image corruptions. Consequently, the model can be regarded as having bad corruption robustness consistency on trigger samples. Compared with the observations about Fig. 1(b), the backdoor-infected models are suspicious to have different corruption robustness consistency on clean samples and trigger samples, i.e., the phenomenon of anomalous CRC.
+
+in [28], where the authors argue that adding this kind of noise can lead to abnormal behavior of backdoor-infected models on trigger samples. In [34], image transformations are used in a two-stage defense pipeline, where the defenders first fine-tune the infected models on one set of transformations and uses another set of transformations on the inference stage. This work is different from ours since it changes the parameters of backdoor-infected models, while we mainly focus on the characteristics of backdoor-infected models without modifications. In [27], the authors evaluate the robustness of backdoor-infected models against multiple image transformations. They argue that some image transformations can mitigate the backdoor while others cannot, which is similar to our findings. But they still rely on a single transformation to defend against backdoor attacks and thus fail to leverage the difference of robustness.
+4. Test-time CRC Evaluation (TeCo)
+In this section, we describe how we build our method based on the phenomenon of anomalous CRC.
+4.1. Preliminaries
+The objective of backdoor attacks is to make the infected model behave normally on clean images but give predefined predictions on trigger samples. Thus, the target [15, 25] of backdoor attackers is training an infected model C with parameters θ by:
+
+3.3. Difference Between CRC and Previous Works
+Some previous works have discussed the corruption (or transformation) robustness of backdoor-infected models before [27,28,34]. Specifically, Gaussian noise is investigated
+
+ \label {eq:backdor_atack} \begin {aligned} \theta = \arg \min \limits _{\theta }&\mathb {E}_{(x, y)\sim {\mathcal P}_S}{\mathcal J}(C(x;\theta ),y) \ +&\mathb {E}_{(\hat {x}, y_t)\sim {\mathcal P}_{\hat {S}}{\mathcal J}(C(\hat {x};\theta ),y_t), \end {aligned} 
+
+(2)
+
+where S, Sˆ represent the clean data and trigger data, respectively, and J is the loss function.
+
+4
+
+TTSD methods work on a trained backdoor-infected
+model Cθ and a test dataset which contains clean samples and trigger samples T = {T ∪ Tˆ}. The goal of designing
+TTSD is to find a method M :
+
+ \label {eq:backdor_detection} \begin {aligned} M = \arg \max \limits _{M}&\mathb {E}_{(x)\sim {\mathcal P}_T}{\mathb {I}(M(x,C_\theta )=0) \ +&\mathb {E}_{(\hat {x})\sim {\mathcal P}_{\hat {T}}{\mathb {I}(M(\hat {x},C_\theta )=1). \end {aligned} 
+
+(3)
+
+4.2. Test-time CRC Evaluation
+To achieve Eq. (2), the trigger sample detection methods should leverage contrasting characteristics of clean images and trigger samples. We have revealed in Sec. 3 that backdoor-infected models have anomalous corruption robustness consistency, which is supported by the ACC and ASR evaluated from the entire test dataset. However, a question is how we can measure this property in test-time based on single input data.
+A reasonable understanding is that the reduction of ACC or ASR is equivalent to the transitions of prediction labels. For example, if a model loses its accuracy on clean images with Gaussian noise, it can be regarded as the prediction labels of these images have changed compared with the original images’. Consequently, we can evaluate the corruption robustness consistency in the inference stage by adding image corruptions with growing severity, and recording the severity when the model’s hard-label prediction gets changed. For different image corruptions, if the recorded severity levels are very similar, we can extrapolate that the corruption robustness consistency on the input image is high.
+After recording the levels of severity, the final step is to measure their dispersion. It is not hard to find such a metric since simply calculating the standard deviation is already effective according to our experiments. Alg. 1 describes the detailed algorithm. TeCo maps the input image x to a linearly separable space, and defenders can make judgments by a threshold γ:
+
+ \label {eq:make_judgements} \begin {aligned} \Gam a (TeCo(x)  = \left \{ \begin {aligned} &1 , TeCo(x) > \gam a \  &0 , TeCo(x) \leq \gam a \end {aligned} \right . \end {aligned} 
+
+(4)
+
+5. Experiments
+5.1. Experimental Settings
+Implementation details. We take the common image corruptions introduced in [18] as the image corruption set DkN in Alg. 1. This corruption set has 15 diverse image corruptions with the severity ranging from 1 to 5. We choose standard deviation as the deviation measurement method4.
+4We investigate the choice of image corruption set and deviation measurement method in the supplementary.
+
+Algorithm 1: Test-time CRC Evaluation (TeCo)
+
+Input: Test sample x; test model Cθ; deviation
+measurement method Dev;image corruption set DKN , where K is the number of corruption types, and N is the maximum of
+
+severity.
+
+Output: Prediction score of test sample x.
+
+1 Initialize L ← {}, Porg ← Cθ(x); 2 for k = 1 to K do
+
+3 L ← N + 1;
+
+4 for n = 1 to N do
+
+5
+
+if Cθ(Dkn(x)) ̸= Porg then
+
+6
+
+L ← n;
+
+7
+
+break;
+
+8
+
+end
+
+9 end
+
+10 L ← L ∪ {L};
+
+11 end
+
+12 deviation ← Dev(L); 13 return deviation
+
+Attack methods. We evaluate our method against seven backdoor attacks, including Badnets attack [14], Blended attack [3], Low-frequency (LF) attack [48], Input-aware attack [32], Wanet attack [33], LIRA attack [8], and SSBA attack [26]. We follow an open-sourced backdoor benchmark [45] for the training settings of these attacks. To ensure the attacks’ strength, 10% of the training set are poisoned. As illustrated in Tab. 3, the attacks in our experiments contain different trigger types.
+Datasets and backbones. Five datasets and four backbones are involved in our experiments. The datasets include CIFAR10 [23], CIFAR100 [23], GTSRB [20], TinyImageNet [24], and ImageNet200 [36] which is used in [26]. For images in relatively low size, we use PreActResNet18 [17] and MobileViT-xs [31] as the backbones. And for ImageNet200, we use WideResNet1012 [47] and SwinTransformer-Base [29], and fine-tune them from checkpoints [44] pre-trained on ImageNet1K.
+Competitors. Since TeCo is the first test-time trigger sample detection method that works in hard-label blackbox settings and has no extra dependency, We compare our method with two trigger sample detection methods that work in looser conditions but still meet the black-box requirement. To the best of our knowledge, STRIP [12] is the first black-box TTSD method, and it still serves as a baseline in many recent works [30, 48]; Frequency detector (FreqDetector) [48] is the state-of-the-art trigger sample detection method. We implement them following their official codes. STRIP needs the logits-based black-box accessibility, while FreqDetector has no requirement for accessing
+
+5
+
+Dataset
+
+Model
+
+Attack→
+
+Badnets [14]
+
+Blended [3]
+
+LF [48]
+
+Input-aware [32]
+
+Wanet [33]
+
+LIRA [8]
+
+SSBA [26]
+
+AVG(↑)
+
+STD(↓)
+
+Detection↓ AUROC F1 score AUROC F1 score AUROC F1 score AUROC F1 score AUROC F1 score AUROC F1 score AUROC F1 score AUROC F1 score AUROC F1 score
+
+CIFAR10
+
+PreActResNet18 MobileViT-xs
+
+STRIP FreqDetector
+Ours
+STRIP FreqDetector
+Ours
+
+0.790 0.989 0.911
+0.736 0.989 0.682
+
+0.743 0.955 0.917
+0.710 0.955 0.724
+
+0.726 0.966 0.935
+0.533 0.966 0.927
+
+0.685 0.904 0.946
+0.549 0.904 0.924
+
+0.973 0.886 0.939
+0.912 0.834 0.917
+
+0.937 0.809 0.937
+0.859 0.763 0.910
+
+0.283 1.000 0.905
+0.390 0.996 0.811
+
+0.526 0.993 0.921
+0.526 0.972 0.786
+
+0.395 0.566 0.915
+0.460 0.510 0.913
+
+0.526 0.550 0.905
+0.526 0.526 0.902
+
+0.555 0.912 0.953
+0.465 0.980 0.964
+
+0.661 0.840 0.934
+0.592 0.940 0.929
+
+0.364 0.896 0.868
+0.379 0.896 0.920
+
+0.526 0.824 0.883
+0.526 0.824 0.911
+
+0.584 0.888 0.918
+0.554 0.882 0.876
+
+0.658 0.839 0.920
+0.613 0.841 0.870
+
+0.236 0.138 0.026
+0.184 0.161 0.090
+
+0.140 0.134 0.020
+0.118 0.146 0.075
+
+GTSRB
+
+PreActResNet18 MobileViT-xs
+
+STRIP FreqDetector
+Ours
+STRIP FreqDetector
+Ours
+
+0.871 0.981 0.869
+0.947 0.981 0.914
+
+0.840 0.939 0.835
+0.939 0.939 0.903
+
+0.883 0.993 0.917
+0.875 0.993 0.924
+
+0.849 0.960 0.913
+0.856 0.960 0.935
+
+0.991 0.964 0.947
+0.962 0.922 0.993
+
+0.981 0.901 0.962
+0.937 0.840 0.988
+
+0.310 0.925 0.956
+0.285 1.000 0.847
+
+0.501 0.848 0.959
+0.501 0.999 0.879
+
+0.356 0.483 0.954
+0.438 0.471 0.973
+
+0.501 0.503 0.961
+0.501 0.511 0.960
+
+0.778 0.595 0.997
+0.616 0.870 0.987
+
+0.791 0.562 0.986
+0.687 0.784 0.952
+
+0.641 0.544 0.943
+0.544 0.544 0.939
+
+0.625 0.548 0.967
+0.552 0.548 0.959
+
+0.690 0.784 0.940
+0.667 0.826 0.940
+
+0.727 0.752 0.940
+0.710 0.797 0.939
+
+0.247 0.213 0.036
+0.246 0.207 0.047
+
+0.173 0.188 0.048
+0.184 0.182 0.034
+
+CIFAR100
+
+PreActResNet18 MobileViT-xs
+
+STRIP FreqDetector
+Ours
+STRIP FreqDetector
+Ours
+
+0.860 0.979 0.939
+0.847 0.979 0.905
+
+0.812 0.923 0.921
+0.798 0.923 0.909
+
+0.769 0.961 0.939
+0.800 0.961 0.946
+
+0.719 0.897 0.945
+0.744 0.897 0.957
+
+0.955 0.837 0.834
+0.940 0.914 0.972
+
+0.898 0.783 0.838
+0.888 0.838 0.967
+
+0.249 0.997 0.878
+0.430 0.999 0.940
+
+0.502 0.976 0.873
+0.519 0.990 0.932
+
+0.485 0.440 0.971
+0.479 0.426 0.898
+
+0.503 0.503 0.959
+0.503 0.503 0.881
+
+0.589 0.954 0.913
+0.609 0.941 0.991
+
+0.590 0.896 0.826
+0.639 0.877 0.965
+
+0.685 0.889 0.968
+0.808 0.889 0.956
+
+0.651 0.807 0.968
+0.750 0.807 0.955
+
+0.656 0.865 0.920
+0.702 0.873 0.944
+
+0.668 0.826 0.904
+0.692 0.834 0.938
+
+0.221 0.181 0.046
+0.181 0.186 0.031
+
+0.140 0.146 0.054
+0.133 0.146 0.030
+
+Tiny-ImageNet ImageNet200
+
+PreActResNet18 MobileViT-xs
+WideResNet101-2 SwinT-Base
+
+STRIP FreqDetector
+Ours
+STRIP FreqDetector
+Ours
+STRIP FreqDetector
+Ours
+STRIP FreqDetector
+Ours
+
+0.852 0.710 0.987
+0.737 0.689 0.979
+0.921 0.526 0.974
+0.992 0.526 0.978
+
+0.788 0.652 0.982
+0.688 0.638 0.981
+0.869 0.520 0.979
+0.968 0.520 0.978
+
+0.949 0.999 0.977
+0.872 0.998 0.974
+0.959 0.998 0.982
+0.939 0.998 0.978
+
+0.892 0.989 0.978
+0.809 0.984 0.975
+0.903 0.986 0.983
+0.875 0.986 0.979
+
+0.995 0.920 0.993
+0.991 0.938 0.982
+-
+-
+
+0.976 0.828 0.989
+0.964 0.865 0.973
+-
+-
+
+0.430 1.000 0.978
+0.421 1.000 0.984
+0.421 1.000 0.937
+0.944 1.000 0.990
+
+0.504 0.996 0.974
+0.516 0.999 0.983
+0.502 1.000 0.920
+0.873 1.000 0.988
+
+0.681 0.655 0.888
+0.647 0.631 0.986
+0.584 0.484 0.987
+0.726 0.455 0.985
+
+0.640 0.617 0.889
+0.615 0.602 0.975
+0.567 0.517 0.977
+0.672 0.504 0.970
+
+0.511 0.960 0.977
+0.585 0.770 0.938
+0.693 0.979 0.997
+0.993 0.974 0.999
+
+0.545 0.910 0.974
+0.655 0.696 0.874
+0.668 0.949 0.996
+0.974 0.940 0.998
+
+0.767 0.992 0.983
+0.766 0.982 0.975
+0.765 0.994 0.922
+0.715 0.994 0.980
+
+0.722 0.958 0.977
+0.716 0.934 0.971
+0.695 0.970 0.938
+0.659 0.970 0.975
+
+0.741 0.891 0.969
+0.717 0.858 0.974
+0.724 0.830 0.966
+0.885 0.825 0.985
+
+0.724 0.850 0.966
+0.709 0.817 0.962
+0.701 0.824 0.965
+0.837 0.820 0.981
+
+0.198 0.135 0.033
+0.174 0.146 0.015
+0.186 0.230 0.027
+0.118 0.237 0.007
+
+0.162 0.147 0.032
+0.134 0.156 0.036
+0.146 0.216 0.027
+0.128 0.218 0.009
+
+* LF is computationally infeasible on ImageNet200.
+
+Table 2. The evaluation results on different attacks, datasets, and backbones. The last two columns show the average performance and the standard deviation of performance across different attacks. The best results are in bold. We highlight that our method not only has good effectiveness, but also keeps outstanding stability (about 5 times of the runner-ups’ on average) against different backdoor attacks including universal, sample-specific, and invisible ones.
+
+Types↓ Attacks→ Badnets Blended LF Input-aware Wanet LIRA SSBA Universal
+Sample-specific Invisible
+Table 3. The backdoor attacks involved in our evaluations have covered the majority of trigger types.
+the backdoor models. In addition, both of them need extra clean data to accomplish the trigger detection task.
+Evaluation metrics. Two metrics are used: (1) The Area Under Receiver Operating Curve (AUROC), which is a widely-used metric to measure the trade-off between the false positive rate for clean samples and true positive rate for trigger samples for a detection method. (2) The F1 score. We calculate the best F1 score of detection methods to evaluate their optimal performance. The F1 score in our experiments is computed by:
+
+TTSD methods should have solid effectiveness against different types of backdoor triggers, we investigate the stability of our method by calculating the standard deviations of its performance on different backdoor attacks with the same dataset and backbone. We highlight that TeCo achieves overall average AUROC = 0.9433 and F1 score = 0.9386, with the standard deviation of AUROCs and F1 scores equal to 0.0360 and 0.0364 respectively. These results indicate that TeCo outperforms the runner-up by about 10% in terms of AUROC, 14% in terms of F1-score, and achieves 5 times of stability against different types of trigger. In summary, our work maintains stable effectiveness among different trigger types, with only hard-label black-box model accessibility and no need for extra knowledge.
+
+ \label {eq:F1} \begin {aligned} \text { F$1$ score} = \max \limits _{\gam a \in \Gam a } \frac {2 \times (\text {precision}_\gam a \times \text {recal }_\gam a )}{(\text {precision}_\gam a + \text {recal }_\gam a )}, \end {aligned} 
+
+(5)
+
+where Γ represents all possible thresholds. We also include additional metrics such as FAR, FRR,
+and Backdoored Data Rejection Rate (BDR). For more implementation details and evaluations, please also refer to the supplementary.
+5.2. Effectiveness Studies
+We first evaluate the performance of TeCo on different backdoor-infected models comprehensively. As shown in Tab. 11, TeCo can precisely detect the trigger samples in the inference stage with the average AUROC ≥ 0.876 for different backdoor attacks on diverse datasets and backbones. In addition, since in the real-world scenario, the
+
+There are also some interesting results about baselines. Since the Low-frequency (LF) attack is designed to avoid FreqDetector [48], FreqDetector should have low effectiveness against this attack. However, we implement them following the official codes and find that if we let FreqDetector work in a binary classification manner and make judgments based on thresholds, it will perform well on LF attack. So we believe it is not unfair to involve LF attack and FreqDetector simultaneously in our experiments. Another interesting phenomenon is the success of STRIP against input-aware and LIRA attacks on SwinTransformerbase/ImageNet200. We further investigate it in our supplementary and show that the performance of STRIP is somehow influenced by the choice of backbones.
+
+6
+
+(a) Blended
+
+(b) SSBA
+
+(c) Wanet
+
+Figure 3. Performance of TeCo against different target labels
+
+5.3. Ablation Studies
+The impact of different target labels. We further evaluate the effectiveness of TeCo against different predefined target labels. We select 3 attacks (Blended, SSBA, and Wanet) from the seven attacks mentioned above to represent the universal, sample-specific, and invisible backdoor attacks, and make them attack 10 different labels that we randomly select from GTSRB. Thus we have 30 backdoor-infected models with different trojan labels and trigger types. Fig. 3 illustrates the stability of TeCo against backdoor attacks with different target labels. For Blended, TeCo remains AUROC ≥ 0.874, and the standard deviation (STD) of AUROC is about 0.021. For SSBA, TeCo achieves AUROC ≥ 0.908 and STD ≈ 0.010. For Wanet, TeCo achieves AUROC ≥ 0.919 and STD ≈ 0.017. These results support that target trojan labels have little influence on TeCo’s performance.
+The impact of max severity N . We mark the computational cost of vanilla inference process as O1(1) and the average computational cost of image corruptions as O2(1). The computational cost of TeCo in the worst case is O1(N × K) + O2(N × K), where K is the number of corruption types and N is the maximum of severity. Thus, given fixed corruption types, the max severity has a critical influence on the running efficiency. Here, we investigate TeCo’s performance with N ranging from 1 to 5. As shown in Tab. 4, TeCo maintains good effectiveness and stability in different N . We illustrate some results in Fig. 4, which shows that TeCo’s performance grows with the increasing max severity N , and still gets satisfying effectiveness with low N . In other words, TeCo also has competitive effectiveness when the computational cost is limited.
+
+Model CNNs ViTs
+
+Dataset
+Metric AUROC F1 score
+AUROC F1 score
+
+CIFAR10
+AVG STD 0.918 0.000 0.914 0.001
+0.868 0.004 0.857 0.004
+
+GTSRB
+AVG STD 0.930 0.012 0.929 0.010
+0.929 0.005 0.931 0.006
+
+CIFAR100
+AVG STD 0.884 0.055 0.879 0.032
+0.936 0.012 0.928 0.016
+
+Tiny-ImageNet
+AVG STD 0.970 0.000 0.966 0.000
+0.954 0.050 0.946 0.033
+
+ImageNet200
+AVG STD 0.949 0.019 0.943 0.017
+0.975 0.002 0.969 0.003
+
+Table 4. Performance of TeCo with a different maximum of severity. The average and standard deviation results suggest that TeCo has high effectiveness in different max severity N and maintains stable performance among different N .
+5.4. Thresholds
+Since TeCo maps the input image x to a linearly separable space and defenders make judgments by a threshold
+
+0.99 0.97 0.95 0.93 0.91
+
+0.89
+
+0.87
+
+0.85
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Max Severity
+
+Average AUROC Average F1 score
+
+0.99 0.97 0.95 0.93 0.91
+
+0.89
+
+0.87
+
+0.85
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Max Severity
+
+Average AUROC Average F1 score
+
+(a) PreActResNet18 / CIFAR10 (b) MobileViT-xs / Tiny-Imagenet
+Figure 4. Illustration of TeCo’s performance with different max severity. Despite TeCo’s performance grows with the increasing max severity N , TeCo still has good performance with low N .
+
+γ, questions are how we can get this threshold and what is the influence of threshold for our method. Here, we evaluate TeCo by setting an empirical threshold directly, which does not break the “no need for extra data” characteristic of TeCo. We use ACC as the evaluation metric, which is calculated by:
+
+ \label {eq:static_th} \begin {aligned} ACC = \frac {TP+TN}{TP+TN+FP+FN}. \end {aligned} 
+
+(6)
+
+Tab. 14 shows the average performance of TeCo in different attacks, datasets, and backbones when an empirical threshold is given. The results suggest that even in the worst case where no data is available for defenders to estimate an appropriate threshold, by empirically setting threshold = 1, TeCo can still get an average ACC ≈ 0.79, which still surpasses STRIP’s performance in optimal thresholds shown in Tab. 11 and is competitive to FreqDetector. We defer a more detailed discussion about thresholds in other different settings to the supplementary.
+
+CNNs ViTs
+
+CIFAR10
+0.8521 0.8018
+
+GTSRB
+0.9242 0.8366
+
+CIFAR100
+0.7735 0.7778
+
+Tiny-ImageNet
+0.6504 0.7569
+
+ImageNet200
+0.7613 0.7610
+
+AVG
+0.7923 0.7868
+
+Table 5. The accuracy of TeCo in the settings where only one empirical threshold (γ = 1) can be set for all attacks
+
+6. Analyses
+6.1. Constructing Adaptive Attacks against TeCo
+As formulated by Eq.( 2), the goal of backdoor attacks is to make models perform normally on clean data but give a specific prediction on trigger samples, the classic loss function for training such models can be defined as:
+
+ \label {eq:backdoor_loss} \begin {aligned} {\mathcal J_{bd}} = \sum ^I_{i=1} CE(C_\theta (x_i), y_i) + \sum ^J_{j=1} CE(C_\theta (\hat {x_j}), y_t), \end {aligned}  (7)
+
+where CE(·) represents the cross entropy loss function. This backdoor loss function is widely used in backdoor attacks. However, we speculate that this dual-target loss function leads backdoor-infected models to act anomalously on trigger samples in terms of corruption robustness. To reveal this point, we first introduce an adaptive loss to attack our
+
+7
+
+(a) Badnets
+
+(b) LF
+
+(c) SSBA
+
+Figure 5. Visualization of backdoor loss, adaptive loss, clean accuracy, and attack success rate in the training process. We note that with the drop of backdoor loss, the adaptive loss rises correspondingly, which indicates a negative correlation between them.
+
+Weight→
+Attack↓
+BadNets LF
+SSBA
+
+0
+
+AUROC F1 score
+
+0.9112 0.9390 0.8683
+
+0.9174 0.9367 0.8835
+
+10−3
+
+AUROC F1 score
+
+0.5763 0.8592 0.7125
+
+0.5928 0.8483 0.7312
+
+10−4
+
+AUROC F1 score
+
+0.6571 0.9219 0.6477
+
+0.6542 0.9154 0.7281
+
+10−5
+
+AUROC F1 score
+
+0.6745 0.8667 0.5909
+
+0.6657 0.8858 0.6852
+
+Weight→
+Attack↓
+BadNets LF
+SSBA
+
+0
+
+C.ACC ASR
+
+0.9153 0.9286 0.9270
+
+0.9502 0.9888 0.9719
+
+10−3
+
+C.ACC ASR
+
+0.5105 0.8022 0.7129
+
+0.7386 0.9443 0.9176
+
+10−4
+
+C.ACC ASR
+
+0.7980 0.8864 0.8925
+
+0.3720 0.9504 0.9162
+
+10−5
+
+C.ACC ASR
+
+0.8546 0.8962 0.8978
+
+0.3001 0.9476 0.9170
+
+Table 6. Performance of TeCo against adaptive backdoor attacks
+
+method TeCo:
+
+ \label {eq:adaptive_los } \begin {aligned} {\mathcal J_{ada}  = \sum ^J_{j=1}\sum ^K_{k=1}\sum ^N_{n=1}&MSE(MSE(C_\theta (x_j), C_\theta (D^k_n(x_j) ), \  &MSE(C_\theta (\hat {x_j}), C_\theta (D^k_n(\hat {x_j}) ) , \end {aligned} 
+
+(8)
+
+where xj is the original version of the trigger sample xˆj. This adaptive loss aims to make models have the same corruption robustness on corrupted clean samples and corrupted trigger samples, which is aligned to the inference logic of TeCo.
+
+6.2. Results of Adaptive Attacks
+
+We convert Badnets, LF, and SSBA to the adaptive version by applying our adaptive loss in their training process, and investigate these adaptive attacks on PreActResNet18/CIFAR10. We first monitor the adaptive loss without derivative in the training phases. As illustrated in Fig. 5, the adaptive loss grows5 when the backdoor loss decreases, which means the success on the dual-target loss function may drive the model to behave differently in terms of corruption robustness. A reasonable hypothesis is the model learns shortcuts [13] for the backdoor trigger guided by the backdoor loss function, however, this trigger is not always robust in image space when facing different image corruptions. These results support TeCo’s effectiveness by showing the negative correlation between backdoor loss and adaptive loss. And since the involved attacks contain different characteristics, such as partial (Badnets), global (LF), universal (Badnets, LF), sample-specific (SSBA), and invisible (SSBA), we suppose that this negative correlation is hard to be avoided by changing trigger types, which confirms the stability of TeCo on the other hand.
+Then we add the adaptive loss to the overall loss function: J = Jbd + αJada, where α is the weight factor. Tab. 6 shows the TeCo’s effectiveness against adaptive attacks and the performance of adaptive attacks. The results indicate that the adaptive attacks can avoid TeCo to some degree, however they sacrifice attack performance once applying the adaptive loss.
+
+5We scale the adaptive loss down to fit the figure by multiplying 10−3.
+
+(a) Without adaptive loss
+
+(b) α = 10−5
+
+(c) α = 10−4
+
+(d) α = 10−3
+
+Figure 6. The red points represent the trigger samples, and the black points are clean samples from the target class. The points in other colors are clean samples from other classes.
+
+Since SSBA has the best performance in Tab. 6, we further visualize the clean and trigger samples in the latent space of the SSBA-infected model. As illustrated in Fig. 6, the adaptive loss pushes the trigger samples from the edge of latent space to the center, making them have a similar distance to different clean samples. Thus, a possible way to attack TeCo is to embed trigger samples in the middle of the latent space. However, this may be hard to achieve as we have shown in Tab. 7, the proposed adaptive attack is not stable enough on different datasets.
+
+Dataset AUROC(↑) F1 score(↑) ACC(↑) FAR(↓) FRR(↓) BDR(↑)
+
+GTSRB CIFAR100
+
+0.9101 0.9141
+
+0.8900 0.9137
+
+89.00 91.37
+
+13.09 5.76
+
+8.90 11.54
+
+91.10 88.46
+
+Table 7. TeCo against adaptive SSBA attack (10−5) on PreAc-
+
+tResNet18
+
+7. Conclusions, Limitations, and Future Work
+In this paper, we propose TeCo, the first test-time trigger sample detection method that only needs the hard-label outputs of the victim models without requiring extra data or assumptions. Extensive experiments support that TeCo has outstanding effectiveness and stability against different backdoor attacks. However, a limitation of TeCo is that using multiple image corruptions will increase the computational cost. Therefore, designing an effective and efficient single corruption function will be our future work.
+
+8
+
+Acknowledgments. Shengshan’s work is supported in part by the National Natural Science Foundation of China (Grant No.U20A20177) and Hubei Province Key R&D Technology Special Innovation Project under Grant No.2021BAA032. Shengshan Hu is the corresponding author.
+References
+[1] Se´rgio Branco, Andre´ G. Ferreira, and Jorge Cabral. Machine learning in resource-scarce embedded systems, FPGAs, and end-devices: A survey. Electronics, 8(11):1289, 2019. 2
+[2] Bryant Chen, Wilka Carvalho, Nathalie Baracaldo, Heiko Ludwig, Benjamin Edwards, Taesung Lee, Ian Molloy, and Biplav Srivastava. Detecting backdoor attacks on deep neural networks by activation clustering. arXiv preprint arXiv:1811.03728, 2018. 3
+[3] Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep learning systems using data poisoning. arXiv preprint arXiv:1712.05526, 2017. 2, 3, 5, 6
+[4] Yao Chen, Jiong He, Xiaofan Zhang, Cong Hao, and Deming Chen. Cloud-DNN: An open framework for mapping DNN models to cloud FPGAs. In Proceedings of the 2019 ACM/SIGDA International Symposium on Fieldprogrammable Gate Arrays (FPGA’19), pages 73–82, 2019. 2
+[5] Edward Chou, Florian Trame`r, Giancarlo Pellegrino, and Dan Boneh. Sentinet: Detecting physical attacks against deep learning systems. arXiv preprint arXiv:1812.00292, 2018. 1, 2, 3
+[6] Kien Do, Haripriya Harikumar, Hung Le, Dung Nguyen, Truyen Tran, Santu Rana, Dang Nguyen, Willy Susilo, and Svetha Venkatesh. Towards effective and robust neural trojan defenses via input filtering. arXiv preprint arXiv:2202.12154, 2022. 3
+[7] Bao Gia Doan, Ehsan Abbasnejad, and Damith C. Ranasinghe. Februus: Input purification defense against trojan attacks on deep neural network systems. In Proceedings of the 36th Annual Computer Security Applications Conference (ACSAC’20), pages 897–912, 2020. 3
+[8] Khoa Doan, Yingjie Lao, Weijie Zhao, and Ping Li. Lira: Learnable, imperceptible and robust backdoor attacks. In Proceedings of the 2021 IEEE/CVF International Conference on Computer Vision (ICCV’21), pages 11966–11976, 2021. 2, 3, 5, 6
+[9] Yinpeng Dong, Xiao Yang, Zhijie Deng, Tianyu Pang, Zihao Xiao, Hang Su, and Jun Zhu. Black-box detection of backdoor attacks with limited information and data. In Proceedings of the 2021 IEEE/CVF International Conference on Computer Vision (CVPR’21), pages 16482–16491, 2021. 1
+[10] Min Du, Ruoxi Jia, and Dawn Song. Robust anomaly detection and backdoor attack detection via differential privacy. In Proceedings of the 8th International Conference on Learning Representations (ICLR’20), 2020. 2, 3
+
+[11] Jeremy Fowers, Kalin Ovtcharov, Michael Papamichael, Todd Massengill, Ming Liu, Daniel Lo, Shlomi Alkalay, Michael Haselman, Logan Adams, Mahdi Ghandi, Stephen Heil, Prerak Patel, Adam Sapek, Gabriel Weisz, Lisa Woods, Sitaram Lanka, Steven K. Reinhardt, Adrian M. Caulfield, Eric S. Chung, and Doug Burger. A configurable cloud-scale DNN processor for real-time AI. In Proceedings of the 45th ACM/IEEE Annual International Symposium on Computer Architecture (ISCA’18), pages 1–14, 2018. 2
+[12] Yansong Gao, Change Xu, Derui Wang, Shiping Chen, Damith C. Ranasinghe, and Surya Nepal. Strip: A defence against trojan attacks on deep neural networks. In Proceedings of the 35th Annual Computer Security Applications Conference (ACSAC’19), pages 113–125, 2019. 1, 2, 3, 5, 12
+[13] Robert Geirhos, Jo¨rn-Henrik Jacobsen, Claudio Michaelis, Richard Zemel, Wieland Brendel, Matthias Bethge, and Felix A. Wichmann. Shortcut learning in deep neural networks. Nature Machine Intelligence, 2(11):665–673, 2020. 8
+[14] Tianyu Gu, Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Evaluating backdooring attacks on deep neural networks. IEEE Access, 7:47230–47244, 2019. 1, 2, 3, 5, 6
+[15] Junfeng Guo, Ang Li, and Cong Liu. AEVA: black-box backdoor detection using adversarial extreme value analysis. In Proceedings of the 10th International Conference on Learning Representations (ICLR’22), 2022. 1, 2, 4, 16
+[16] Jonathan Hayase, Weihao Kong, Raghav Somani, and Sewoong Oh. Spectre: defending against backdoor attacks using robust statistics. In Proceedings of the 38th International Conference on Machine Learning (ICML’21), volume 139, pages 4129–4139, 2021. 3
+[17] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Identity mappings in deep residual networks. In Proceedings of the 2016 European Conference on Computer Vision (ECCV’16), pages 630–645, 2016. 5
+[18] Dan Hendrycks and Thomas G. Dietterich. Benchmarking neural network robustness to common corruptions and perturbations. In Proceedings of the 7th International Conference on Learning Representations (ICLR’19), 2019. 2, 3, 5
+[19] Ehsan Hesamifard, Hassan Takabi, Mehdi Ghasemi, and Rebecca N. Wright. Privacy-preserving machine learning as a service. Proc. Priv. Enhancing Technol., 2018(3):123–142, 2018. 2
+[20] Sebastian Houben, Johannes Stallkamp, Jan Salmen, Marc Schlipsing, and Christian Igel. Detection of traffic signs in real-world images: The german traffic sign detection benchmark. In Proceedings of the 2013 International Joint Conference on Neural Networks (IJCNN’13), pages 1–8, 2013. 5
+[21] Shengshan Hu, Ziqi Zhou, Yechao Zhang, Leo Yu Zhang, Yifeng Zheng, Yuanyuan He, and Hai Jin. Badhash: Invisible backdoor attacks against deep hashing with clean label. In Proceedings of the 30th ACM International Conference on Multimedia (MM’22), pages 678–686, 2022. 2
+[22] Kaidi Jin, Tianwei Zhang, Chao Shen, Yufei Chen, Ming Fan, Chenhao Lin, and Ting Liu. Can we mitigate backdoor
+
+9
+
+attack using adversarial detection methods? IEEE Transactions on Dependable and Secure Computing, 2022. 3
+[23] Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. 2009. 5
+[24] Ya Le and Xuan Yang. Tiny imagenet visual recognition challenge. CS 231N, 7(7):3, 2015. 5
+[25] Yiming Li, Yong Jiang, Zhifeng Li, and Shu-Tao Xia. Backdoor learning: A survey. IEEE Transactions on Neural Networks and Learning Systems, 2022. 4
+[26] Yuezun Li, Yiming Li, Baoyuan Wu, Longkang Li, Ran He, and Siwei Lyu. Invisible backdoor attack with samplespecific triggers. In Proceedings of the 2021 IEEE/CVF International Conference on Computer Vision (ICCV’21), pages 16443–16452, 2021. 1, 2, 3, 5, 6
+[27] Yiming Li, Tongqing Zhai, Baoyuan Wu, Yong Jiang, Zhifeng Li, and Shutao Xia. Rethinking the trigger of backdoor attack. arXiv preprint arXiv:2004.04692, 2020. 2, 4
+[28] Guanxiong Liu, Abdallah Khreishah, Fatima Sharadgah, and Issa Khalil. An adaptive black-box defense against trojan attacks (trojdef). arXiv preprint arXiv:2209.01721, 2022. 2, 3, 4
+[29] Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo. Swin transformer: Hierarchical vision transformer using shifted windows. In Proceedings of the 2021 IEEE/CVF International Conference on Computer Vision (ICCV’21), pages 10012–10022, 2021. 5
+[30] Wanlun Ma, Derui Wang, Ruoxi Sun, Minhui Xue, Sheng Wen, and Yang Xiang. The ”Beatrix” resurrections: Robust backdoor detection via gram matrices. arXiv preprint arXiv:2209.11715, 2022. 1, 2, 3, 5, 12
+[31] Sachin Mehta and Mohammad Rastegari. Mobilevit: Lightweight, general-purpose, and mobile-friendly vision transformer. In Proceedings of the 10th International Conference on Learning Representations (ICLR’22), 2022. 5
+[32] Tuan Anh Nguyen and Anh Tuan Tran. Input-aware dynamic backdoor attack. In Proceedings of the 34th Conference on Neural Information Processing Systems (NeurIPS’20), pages 3454–3464, 2020. 1, 2, 3, 5, 6
+[33] Tuan Anh Nguyen and Anh Tuan Tran. Wanet - imperceptible warping-based backdoor attack. In Proceedings of the 9th International Conference on Learning Representations (ICLR’21), 2021. 2, 3, 5, 6
+[34] Han Qiu, Yi Zeng, Shangwei Guo, Tianwei Zhang, Meikang Qiu, and Bhavani Thuraisingham. Deepsweep: An evaluation framework for mitigating dnn backdoor attacks using data augmentation. In Proceedings of the 2021 ACM Asia Conference on Computer and Communications Security (AsiaCCS’21), pages 363–377, 2021. 2, 4
+[35] Mauro Ribeiro, Katarina Grolinger, and Miriam A. M. Capretz. MLaaS: Machine learning as a service. In Proceedings of the IEEE 14th International Conference on Machine Learning and Applications (ICMLA’15), pages 896– 902, 2015. 2
+[36] Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng Huang, Andrej Karpathy, Aditya Khosla, Michael S. Bernstein, Alexander C.
+
+Berg, and Li Fei-Fei. Imagenet large scale visual recognition challenge. International Journal of Computer Vision, 115(3):211–252, 2015. 5
+[37] Ahmed Salem, Rui Wen, Michael Backes, Shiqing Ma, and Yang Zhang. Dynamic backdoor attacks against machine learning models. In Proceedings of the 7th European Symposium on Security and Privacy (EuroS&P’22), pages 703– 718, 2022. 3
+[38] Hossein Souri, Micah Goldblum, Liam Fowl, Rama Chellappa, and Tom Goldstein. Sleeper agent: Scalable hidden trigger backdoors for neural networks trained from scratch. arXiv preprint arXiv:2106.08970, 2021. 1, 15
+[39] Di Tang, XiaoFeng Wang, Haixu Tang, and Kehuan Zhang. Demon in the variant: Statistical analysis of DNNs for robust backdoor contamination detection. In Proceedings of the 30th USENIX Security Symposium (USENIX Security’21), pages 1541–1558, 2021. 1, 2, 3
+[40] Guanhong Tao, Guangyu Shen, Yingqi Liu, Shengwei An, Qiuling Xu, Shiqing Ma, Pan Li, and Xiangyu Zhang. Better trigger inversion optimization in backdoor scanning. In Proceedings of the 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR’22), pages 13368– 13378, 2022. 1
+[41] Brandon Tran, Jerry Li, and Aleksander Madry. Spectral signatures in backdoor attacks. Proceedings of the 32nd Conference on Neural Information Processing Systems (NeurIPS’18), 31, 2018. 3
+[42] Sakshi Udeshi, Shanshan Peng, Gerald Woo, Lionell Loh, Louth Rawshan, and Sudipta Chattopadhyay. Model agnostic defence against backdoor attacks in machine learning. IEEE Transactions on Reliability, 2022. 1, 2, 3
+[43] Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y. Zhao. Neural cleanse: Identifying and mitigating backdoor attacks in neural networks. In Proceedings of the 2019 IEEE Symposium on Security and Privacy (SP’19), pages 707–723, 2019. 1
+[44] Ross Wightman. Pytorch image models. https : / / github . com / rwightman / pytorch - image models, 2019. 5
+[45] Baoyuan Wu, Hongrui Chen, Mingda Zhang, Zihao Zhu, Shaokui Wei, Danni Yuan, Chao Shen, and Hongyuan Zha. Backdoorbench: A comprehensive benchmark of backdoor learning. In Proceedings of the NeurIPS 2022 Track Datasets and Benchmarks, 2022. 5
+[46] Xiaojun Xu, Qi Wang, Huichen Li, Nikita Borisov, Carl A Gunter, and Bo Li. Detecting AI trojans using meta neural analysis. In Proceedings of the 2021 IEEE Symposium on Security and Privacy (SP’21), pages 103–120, 2021. 1
+[47] Sergey Zagoruyko and Nikos Komodakis. Wide residual networks. In Proceedings of the 2016 British Machine Vision Conference, (BMVC’16), 2016. 5
+[48] Yi Zeng, Won Park, Z. Morley Mao, and Ruoxi Jia. Rethinking the backdoor attacks’ triggers: A frequency perspective. In Proceedings of the 2021 IEEE/CVF International Conference on Computer Vision (ICCV’21), pages 16473–16481, 2021. 2, 3, 5, 6, 12, 13
+
+10
+
+[49] Zhendong Zhao, Xiaojun Chen, Yuexin Xuan, Ye Dong, Dakui Wang, and Kaitai Liang. Defeat: Deep hidden feature backdoor attacks by imperceptible perturbation and latent representation constraints. In Proceedings of the 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR’22), pages 15213–15222, 2022. 2
+11
+
+A. Implementation Details
+A.1. Baselines
+Tab. 8 and Tab. 9 show the effectiveness of different attacks on different backbones and datasets, indicating that all the attacks are valid.
+STRIP [12]. We re-implement STRIP following the official codes 6 and a reference 7. For every input image, we use 100 clean images from test data for superimposing.
+FreqDetector [48]. We re-implement FreqDetector following the official codes 8. We choose PreActResNet18 as the backbone of FreqDetector, and let all clean training images (for example, 50000 images in CIFAR10) serve as the training data of FreqDetector. Following the paper and official codes, we choose a random white block, random colored block, Gaussian noise, random shadow, and random blend as data augmentations.
+
+B. Additional Experiments and Discussions
+B.1. Thresholds
+Since TeCo maps the input image x to a linearly separable space and defenders make judgments by a threshold γ, questions are how we can get this threshold and what is the influence of threshold for our method. We investigate these questions in three scenarios: (1) calculating appropriate thresholds from clean data (this seems to have broken the “no need for extra data” characteristic of TeCo, we will discuss this later.). (2) setting single statistical and static threshold for all potential attacks. (3) setting empirical threshold directly. We evaluate the effectiveness of TeCo in these three scenarios. We use ACC as the evaluation metric, which is calculated by:
+
+ \label {eq:static_th} \begin {aligned} ACC = \frac {TP+TN}{TP+TN+FP+FN}. \end {aligned} 
+
+(9)
+
+ACC is enough to estimate the effectiveness because the
+number of test clean images and the number of test trigger
+samples are very close according to Tab. 10. Effectiveness on estimated threshold. In this setting,
+we assume defenders can estimate thresholds based on a small set of test clean samples. The estimated threshold is calculated by:
+
+ \label {eq:static_th} \begin {aligned} \gam a _{est} = \frac {1}{E}\sum ^E_{e=1} Dev(\mathcal L_e), \end {aligned} 
+
+(10)
+
+where E is the number of clean images used to estimate thresholds, Dev is the deviation measurement method, and Le is the recorded severity list for e-th clean image. Tab 12
+6https://github.com/garrisongys/STRIP 7https : / / github . com / wanlunsec / Beatrix / tree / master/defenses/STRIP 8https : / / github . com / YiZeng623 / frequency backdoor/tree/main/Sec4_Frequency_Detection
+
+shows the average performance of TeCo in different attacks, datasets, and backbones. These results indicate that TeCo can achieve high effectiveness with a small number of clean data.
+Effectiveness on statistical and static threshold. In some real-world scenarios, the defenders can only set a single prior threshold for all possible attacks. Thus, we investigate the performance of TeCo and two baselines in the static thresholds settings, where only one threshold can be set to detect all the backdoor attacks. The statistical and static threshold is calculated by:
+ \label {eq:static_th} \begin {aligned} \overline {\gama } = \frac {1}{M}\sum ^M_{m=1} \arg \max \limits _{\gama \in \Gama } \frac {2 \times (\text {precision}_\gama \times \text {recal}_\gama )}{(\text {precision}_\gama + \text {recal}_\gama )}, \end {aligned}  (11)
+where M is the number of backdoor attacks. Tab 13 shows the accuracy of the detection methods. TeCo achieves the best effectiveness in 50% settings and the best average effectiveness. These results suggest TeCo can be a practical solution and have performance comparable with the SOTA method which works on looser conditions.
+Effectiveness on the empirical threshold. The most simple way to set the thresholds is to choose common values directly. Tab. 14 shows the average performance of TeCo in different attacks, datasets, and backbones when an empirical threshold is given. The results suggest that by empirically setting threshold = 1, TeCo can still get an average ACC ≈ 0.79, which is a satisfying performance compared with the results in Tab. 12. Since the standard deviation is always larger than or equal to 0, it is easy to choose 1 as the threshold without estimating on clean data.
+Statement of No Need for Extra Data In our paper, we claim that the proposed method TeCo is independent of extra clean data. However, someone may get confused because theoretically TeCo still needs clean data to get the most appropriate thresholds. We emphasize TeCo’s “no need for extra data” characteristic from two aspects: On the one hand, compared with black-box TTSD methods, TeCo is free of extra data in the linearly separable space mapping process, which is clearly different from existing methods. For example, STRIP superimposes various clean images on the suspicious samples, and FreqDetector needs clean data to serve as the training set of the trigger sample detector. These methods cannot map the input data into a linearly separable space without clean data. On the other hand, other TTSD methods need clean data to gain appropriate thresholds, which seems similar to TeCo. However, TeCo is still different from them because according to Tab. 12 and Tab. 14, we can directly set a threshold for TeCo (for example, set γ = 1) without estimating on clean data and enjoy similar performance compared with estimated thresholds. Take Beatrix [30] as a counterexample, Beatrix is a white-box TTSD method that needs clean data to get appropriate thresholds. According to the paper, the
+
+12
+
+Dataset CIFAR10 GTSRB CIFAR100 Tiny-ImageNet ImageNet200 GTSRB (all2all)
+
+Attack→ Backbone↓
+PreActResNet18 MobileViT-xs
+PreActResNet18 MobileViT-xs
+PreActResNet18 MobileViT-xs
+PreActResNet18 MobileViT-xs
+WideResNet101-2 SwinT-Base
+PreActResNet18
+
+Badnets ACC ASR
+91.53 95.02 90.62 95.71
+97.74 93.35 97.52 94.48
+67.38 88.09 59.62 89.39
+56.11 99.97 47.61 99.99
+71.06 99.76 74.48 99.94
+97.84 91.88
+
+Blended ACC ASR
+93.09 99.71 91.14 99.50
+98.20 99.98 97.49 99.98
+69.63 99.45 61.95 99.52
+56.40 99.59 48.08 99.90
+71.75 99.28 78.89 100.00
+98.54 95.72
+
+LF ACC ASR
+
+92.86 98.88 90.67 96.37
+
+97.25 99.86 97.82 98.35
+
+68.96 94.71 61.36 95.45
+
+55.74 98.64 48.41 97.18
+
+-
+
+-
+
+-
+
+-
+
+98.16 96.56
+
+Input-aware ACC ASR
+90.33 94.50 87.84 96.67
+97.36 96.39 96.53 97.21
+64.48 88.46 55.63 92.38
+57.09 99.08 55.91 99.67
+75.65 82.04 84.92 99.91
+97.25 85.78
+
+Wanet ACC ASR
+90.37 91.23 88.94 90.78
+97.74 92.94 95.44 94.77
+64.43 93.41 59.24 75.81
+57.29 99.51 55.38 99.18
+94.44 90.36 77.04 94.83
+98.88 98.82
+
+LIRA ACC ASR
+89.94 100.00 83.89 100.00
+96.37 100.00 93.97 100.00
+66.42 100.00 52.98 100.00
+54.57 99.96 51.00 99.95
+77.39 100.00 82.88 100.00
+96.64 96.59
+
+SSBA ACC ASR
+92.70 97.19 90.29 95.28
+98.23 99.53 97.65 98.72
+68.81 97.54 60.80 96.87
+55.32 97.73 48.24 97.27
+90.51 94.14 97.50 86.22
+97.88 95.43
+
+Table 8. The effectiveness of backdoor attacks on different backbones and datasets. We use these backdoor-infected models to further evaluate our method.
+
+Attack Badnets Input-aware Wanet
+
+Metric
+ASR ACC
+ASR ACC
+ASR ACC
+
+1
+93.35 97.74
+92.94 97.74
+96.39 97.36
+
+2
+95.52 97.53
+92.73 98.69
+95.65 97.36
+
+3
+95.76 97.86
+90.84 98.60
+92.56 97.48
+
+4
+94.93 97.54
+95.07 98.39
+89.37 98.65
+
+5
+95.16 97.77
+90.56 98.71
+90.89 97.81
+
+6
+94.59 97.42
+96.00 98.31
+93.41 98.57
+
+7
+94.92 97.77
+97.01 97.76
+99.33 98.13
+
+8
+96.12 97.78
+93.46 97.94
+96.62 97.47
+
+9
+94.54 97.66
+92.45 98.16
+97.27 97.13
+
+10
+95.57 97.21
+94.40 97.19
+98.17 96.94
+
+Table 9. The effectiveness of backdoor attacks on different target labels
+
+Dataset
+CIFAR10 GTSRB CIFAR100 Tiny-ImageNet ImageNet200
+
+#Classes
+10 43 100 200 200
+
+Image Size
+3×32×32 3×32×32 3×32×32 3×64×64 3×224×224
+
+Training Data
+50000 39209 50000 100000 100000
+
+Test Data
+
+Clean Images Trigger Samples
+
+10000 12630 10000 10000 10000
+
+9000 12570 9900 9950 9950
+
+Table 10. Datasets for evaluations
+
+appropriate threshold of Beatrix on CIFAR10 is about 0.02, however for GTSRB, the appropriate threshold is about 1.0, which means the best thresholds of Beatrix among different datasets are quite different, making it hard to set empirical thresholds.
+In a nutshell, for most TTSD methods, the need for extra data is a necessary condition for their effectiveness. On the contrary, extra clean data is neither sufficient nor necessary for TeCo. And this is why we can claim TeCo has no need for extra data.
+
+B.2. Ablation Studies of Image Corruption Set
+We investigate the influence of image corruption set by dividing the involved 15 image corruptions into 4 groups, as shown in Tab. 17. Tab. 15 presents the performance of TeCo based on different combinations of image corruption groups. The results suggest that only relying on a single type of corruption is not sufficient to get high effectiveness, which is a misunderstanding in related works as we mentioned in our paper. With more corruptions being considered, the performance of TeCo grows correspondingly, indicating that the diversity of image corruptions is an im-
+
+portant factor for gaining effectiveness and stability across different attacks and datasets.
+B.3. Ablation Studies of Variation Metrics
+We investigate the influence of the deviation measurement method Dev by introducing four more metrics: Range 9, Mean Deviation 10, Coefficient of Variation 11, and Quartile Deviation 12. Tab. 16 presents the performance of TeCo based on different deviation measurement methods.
+B.4. Discussion of Outliers
+There are some interesting results about baselines. Since the Low-frequency (LF) attack is designed to avoid FreqDetector [48], FreqDetector should have low effectiveness against this attack. However, we implement them following the official codes and find that if we let FreqDetector work in a binary classification manner and make judgments based on thresholds, it will perform well on LF attack. So we believe it is not unfair to involve LF attack and FreqDetector simultaneously in our experiments. To prove the implementation correctness of FreqDetector, we share the performance of FreqDetector on its original mode in Tab. 19, which indicates that LF attack does avoid its detection if FreqDetector works on its original mode. In addition, Wanet can avoid detection, which is aligned with the results in our paper.
+Another interesting phenomenon is the success of STRIP against Input-aware and LIRA attacks on SwinTransformerbase/ImageNet200, while STRIP fails on other datasets and backbones. We re-run these experiments by setting different random seeds to ensure the stability of the results. As shown
+9https : / / en . wikipedia . org / wiki / Range _ (statistics)
+10https : / / en . wikipedia . org / wiki / Average _ absolute_deviation
+11https://en.wikipedia.org/wiki/Coefficient_of_ variation
+12https : / / en . wikipedia . org / wiki / Interquartile _ range
+
+13
+
+Dataset
+
+Model
+
+Attack→
+
+Badnets
+
+Blended
+
+LF
+
+Input-Aware
+
+Wanet
+
+LIRA
+
+SSBA
+
+AVG
+
+Detection↓ FAR FRR BDR FAR FRR BDR FAR FRR BDR FAR FRR BDR FAR FRR BDR FAR FRR BDR FAR FRR BDR FAR FRR BDR
+
+CIFAR10
+
+STRIP 0.37 0.15 0.85 0.38 0.26 0.74 0.08 0.05 0.95 1.00 0.00 1.00 1.00 0.00 1.00 0.71 0.01 0.99 1.00 0.00 1.00 0.65 0.07 0.93
+
+PreActResNet18 FreqDetector 0.02 0.08 0.92 0.07 0.12 0.88 0.10 0.29 0.71 0.01 0.01 0.99 0.38 0.52 0.48 0.10 0.23 0.77 0.10 0.26 0.74 0.11 0.22 0.78
+
+Ours
+
+0.11 0.05 0.95 0.10 0.00 1.00 0.11 0.01 0.99 0.10 0.06 0.95 0.10 0.09 0.91 0.12 0.01 0.99 0.20 0.03 0.97 0.12 0.04 0.97
+
+MobileViT-xs
+
+STRIP 0.44 0.16 0.84 0.76 0.17 0.83 0.14 0.14 0.86 1.00 0.00 1.00 1.00 0.00 1.00 0.86 0.01 1.00 1.00 0.00 1.00 0.74 0.07 0.93
+
+FreqDetector 0.02 0.08 0.92 0.07 0.12 0.88 0.13 0.35 0.65 0.03 0.03 0.97 0.00 1.00 0.00 0.03 0.10 0.90 0.10 0.26 0.74 0.05 0.28 0.72
+
+Ours
+
+0.44 0.10 0.90 0.14 0.01 0.99 0.14 0.04 0.96 0.22 0.21 0.79 0.10 0.09 0.91 0.07 0.07 0.93 0.12 0.06 0.95 0.17 0.08 0.92
+
+GTSRB
+
+STRIP 0.24 0.08 0.92 0.22 0.08 0.92 0.03 0.01 0.99 1.00 0.00 1.00 1.00 0.00 1.00 0.40 0.02 0.98 0.41 0.34 0.66 0.47 0.08 0.92
+
+PreActResNet18 FreqDetector 0.02 0.10 0.90 0.04 0.04 0.96 0.12 0.08 0.92 0.12 0.18 0.82 0.88 0.11 0.89 0.48 0.40 0.60 0.14 0.77 0.23 0.26 0.24 0.76
+
+Ours
+
+0.18 0.15 0.85 0.12 0.05 0.95 0.07 0.01 0.99 0.05 0.04 0.96 0.01 0.07 0.93 0.03 0.00 1.00 0.06 0.01 0.99 0.07 0.05 0.95
+
+MobileViT-xs
+
+STRIP 0.02 0.11 0.89 0.24 0.04 0.96 0.11 0.02 0.98 1.00 0.00 1.00 1.00 0.00 1.00 0.62 0.01 0.99 0.61 0.29 0.71 0.51 0.07 0.93
+
+FreqDetector 0.02 0.10 0.90 0.04 0.04 0.96 0.18 0.14 0.86 0.00 0.00 1.00 0.85 0.13 0.87 0.27 0.16 0.84 0.14 0.77 0.23 0.21 0.19 0.81
+
+Ours
+
+0.15 0.04 0.96 0.13 0.00 1.00 0.01 0.02 0.98 0.18 0.06 0.94 0.03 0.05 0.95 0.05 0.05 0.95 0.07 0.01 0.99 0.09 0.03 0.97
+
+CIFAR100
+
+STRIP 0.25 0.12 0.88 0.36 0.20 0.80 0.11 0.10 0.90 1.00 0.00 1.00 1.00 0.00 1.00 0.76 0.06 0.94 0.41 0.29 0.71 0.56 0.11 0.89
+
+PreActResNet18 FreqDetector 0.02 0.13 0.87 0.09 0.11 0.89 0.08 0.35 0.65 0.02 0.03 0.97 0.00 1.00 0.00 0.07 0.14 0.86 0.12 0.26 0.74 0.06 0.29 0.71
+
+Ours
+
+0.04 0.12 0.88 0.06 0.05 0.95 0.07 0.25 0.75 0.08 0.17 0.83 0.02 0.06 0.94 0.21 0.14 0.86 0.04 0.02 0.98 0.07 0.12 0.88
+
+MobileViT-xs
+
+STRIP 0.29 0.11 0.89 0.31 0.20 0.80 0.09 0.14 0.86 0.88 0.09 0.91 1.00 0.00 1.00 0.60 0.13 0.87 0.24 0.26 0.74 0.49 0.13 0.87
+
+FreqDetector 0.02 0.13 0.87 0.09 0.11 0.89 0.09 0.23 0.77 0.01 0.01 0.99 0.00 1.00 0.00 0.08 0.16 0.84 0.12 0.26 0.74 0.06 0.27 0.73
+
+Ours
+
+0.06 0.12 0.88 0.07 0.02 0.98 0.02 0.05 0.95 0.07 0.06 0.94 0.08 0.16 0.84 0.04 0.03 0.97 0.05 0.04 0.96 0.06 0.07 0.93
+
+STRIP 0.14 0.29 0.71 0.14 0.08 0.92 0.03 0.02 0.98 0.98 0.02 0.98 0.31 0.41 0.59 0.91 0.00 1.00 0.36 0.19 0.81 0.41 0.14 0.86
+
+PreActResNet18 FreqDetector 0.25 0.44 0.56 0.01 0.01 0.99 0.19 0.16 0.84 0.00 0.00 1.00 0.49 0.28 0.72 0.03 0.15 0.85 0.03 0.05 0.95 0.15 0.15 0.85
+
+Ours
+
+0.03 0.00 1.00 0.04 0.01 0.99 0.01 0.01 0.99 0.04 0.01 0.99 0.04 0.18 0.82 0.05 0.00 1.00 0.02 0.03 0.97 0.03 0.03 0.97
+
+Tiny-ImageNet
+
+STRIP 0.22 0.40 0.60 0.24 0.14 0.86 0.04 0.03 0.97 0.93 0.04 0.96 0.32 0.45 0.55 0.62 0.07 0.93 0.36 0.21 0.79 0.39 0.19 0.81
+
+MobileViT-xs
+
+FreqDetector 0.23 0.50 0.50 0.01 0.02 0.98 0.10 0.17 0.83 0.00 0.00 1.00 0.48 0.32 0.68 0.18 0.43 0.57 0.05 0.08 0.92 0.15 0.22 0.78
+
+Ours
+
+0.04 0.00 1.00 0.05 0.00 1.00 0.03 0.02 0.98 0.03 0.00 1.00 0.04 0.01 0.99 0.11 0.14 0.86 0.03 0.02 0.98 0.05 0.03 0.97
+
+STRIP 0.02 0.04 0.96 0.13 0.12 0.88 -
+
+-
+
+- 0.11 0.15 0.85 0.28 0.37 0.63 0.03 0.02 0.98 0.31 0.37 0.63 0.15 0.18 0.82
+
+WideResNet101-2 FreqDetector 0.40 0.56 0.44 0.01 0.02 0.98 -
+
+-
+
+- 0.00 0.00 1.00 0.11 0.88 0.12 0.04 0.08 0.92 0.02 0.04 0.96 0.09 0.27 0.73
+
+Ours
+
+0.04 0.00 1.00 0.04 0.00 1.00 -
+
+-
+
+- 0.02 0.00 1.00 0.04 0.02 0.98 0.00 0.00 1.00 0.03 0.02 0.98 0.03 0.01 0.99
+
+ImageNet200
+
+STRIP 0.08 0.19 0.81 0.10 0.10 0.90 -
+
+-
+
+- 0.98 0.01 0.99 0.34 0.53 0.47 0.64 0.03 0.97 0.38 0.23 0.77 0.42 0.18 0.82
+
+SwinT-Base
+
+FreqDetector 0.40 0.56 0.44 0.01 0.02 0.98 -
+
+-
+
+- 0.00 0.00 1.00 0.19 0.78 0.22 0.04 0.07 0.93 0.02 0.04 0.96 0.11 0.25 0.75
+
+Ours
+
+0.04 0.00 1.00 0.02 0.01 0.99 -
+
+-
+
+- 0.04 0.12 0.88 0.04 0.01 0.99 0.01 0.00 1.00 0.07 0.05 0.95 0.04 0.03 0.97
+
+* LF is computationally infeasible on ImageNet200.
+
+Table 11. The evaluation results on different attacks, datasets, and backbones. We observe that the results in additional metrics (FAR, FRR, and Backdoored Data Rejection Rate (BDR)) with optimal thresholds are aligned with the conclusions in the paper.
+
+Avg, of ACC
+CNNs ViTs
+
+CIFAR10 E = 1 E = 10 E = 50
+0.7766 0.7802 0.8078 0.7066 0.8000 0.7801
+
+E=1
+0.8931 0.8349
+
+GTSRB E = 10 E = 50
+0.9011 0.8968 0.8779 0.8687
+
+CIFAR100 E = 1 E = 10 E = 50
+0.8850 0.8730 0.8823 0.9097 0.8998 0.8957
+
+Tiny-ImageNet E = 1 E = 10 E = 50
+0.9618 0.9618 0.9618 0.9492 0.9336 0.9377
+
+ImageNet200 E = 1 E = 10 E = 50
+0.9773 0.9773 0.9773 0.9145 0.9639 0.9639
+
+E=1
+0.8987 0.8630
+
+AVG E = 10
+0.8987 0.8950
+
+E = 50
+0.9052 0.8892
+
+Table 12. The accuracy of TeCo in the settings where defenders can estimate the thresholds based on n clean images
+
+Avg, of ACC
+CNNs ViTs
+
+STRIP
+0.6188 0.5917
+
+CIFAR10
+FreqDetector
+0.8245 0.8233
+
+Ours
+0.8939 0.7665
+
+STRIP
+0.7008 0.4988
+
+GTSRB
+FreqDetector
+0.7395 0.7687
+
+Ours
+0.8899 0.7668
+
+STRIP
+0.5868 0.6349
+
+CIFAR100
+FreqDetector 0.8053 0.8066
+
+Ours
+0.7434 0.7381
+
+Tiny-ImageNet
+
+STRIP FreqDetector Ours
+
+0.6735 0.6896
+
+0.8200 0.7920
+
+0.8101 0.8778
+
+STRIP
+0.8135 0.6735
+
+ImageNet200 FreqDetector
+0.8135 0.8153
+
+Ours
+0.9760 0.9639
+
+STRIP
+0.6787 0.6177
+
+AVG FreqDetector
+0.8006 0.8012
+
+Ours
+0.8627 0.8226
+
+Table 13. The accuracy of TeCo and two baselines in the settings where only one statistical threshold can be set to detect all attacks
+
+Avg, of ACC
+CNNs ViTs
+
+CIFAR10 γ = 0 γ = 0.5 γ = 1
+0.6672 0.7824 0.8521 0.6130 0.7345 0.8018
+
+γ=0
+0.6604 0.6132
+
+GTSRB γ = 0.5
+0.7802 0.7236
+
+γ=1
+0.9242 0.8366
+
+CIFAR100 γ = 0 γ = 0.5 γ = 1
+0.8111 0.8367 0.7735 0.7816 0.8440 0.7778
+
+Tiny-ImageNet γ = 0 γ = 0.5 γ = 1
+0.7351 0.7933 0.6504 0.7460 0.8590 0.7569
+
+ImageNet200 γ = 0 γ = 0.5 γ = 1
+0.6125 0.7309 0.7613 0.6313 0.7435 0.7610
+
+γ=0
+0.6973 0.6770
+
+AVG γ = 0.5
+0.7847 0.7809
+
+γ=1
+0.7923 0.7868
+
+Table 14. The accuracy of TeCo in the settings where only one empirical threshold can be set to detect all attacks
+
+Group
+Metric Avg. of AVG(↑) Avg. of STD(↓)
+G2+3
+AUROC F1 score 0.756 0.760 0.183 0.170
+
+G1
+AUROC F1 score 0.780 0.782 0.184 0.178
+G2+4
+AUROC F1 score 0.734 0.743 0.187 0.171
+
+G2
+AUROC F1 score 0.661 0.677 0.171 0.156
+G3+4
+AUROC F1 score 0.708 0.713 0.199 0.183
+
+G3
+AUROC F1 score 0.637 0.669 0.226 0.172
+G1
+AUROC F1 score 0.771 0.775 0.189 0.175
+
+G4
+AUROC F1 score 0.536 0.543 0.081 0.081
+G2
+AUROC F1 score 0.935 0.931 0.050 0.052
+
+G1+2
+AUROC F1 score 0.906 0.902 0.082 0.084
+G3
+AUROC F1 score 0.923 0.920 0.060 0.064
+
+G1+3
+AUROC F1 score 0.907 0.908 0.104 0.084
+G4
+AUROC F1 score 0.938 0.929 0.042 0.041
+
+G1+4
+AUROC F1 score 0.900 0.901 0.095 0.092
+ALL
+AUROC F1 score 0.945 0.940 0.035 0.034
+
+Table 15. The performance of TeCo based on different image corruption sets. Results are averaged from different attacks, datasets, and backbones.
+
+in Tab. 18, the results from different random seeds are similar, indicating that the performance of STRIP is somehow influenced by the choice of datasets and backbones.
+
+B.5. Additional Experiments
+Effectiveness against all-to-all attacks. In practice, a backdoor-infected model may have multiple labels embedded with Trojans, i.e., the multiple classes scenario. Here, we consider the worst multiple classes scenario (all-to-all
+
+14
+
+Measure
+Metric Avg. of AVG(↑) Avg. of STD(↓)
+
+Standard Deviation
+AUROC F1 score 0.944 0.939 0.035 0.034
+
+Range
+AUROC F1 score 0.912 0.906 0.068 0.069
+
+Mean Deviation
+AUROC F1 score 0.945 0.939 0.035 0.034
+
+Coefficient of Variation
+
+AUROC 0.895 0.075
+
+F1 score 0.906 0.062
+
+Quartile Deviation
+AUROC F1 score 0.708 0.710 0.186 0.180
+
+Table 16. The performance of TeCo based on different measures of variation. Results are averaged from different attacks, datasets, and backbones.
+
+Group
+G1 G2 G3 G4
+
+Type
+Noise Blur Nature Digital
+
+Corruptions
+Gaussian Noise, Shot Noise, Impulse Noise Defocus Blur, Glass Blur, Motion Blur, Zoom Blur
+Snow, Frost, Fog, Brightness Contrast, Elastic Transform, Pixelate, Jpeg Compression
+
+Runs
+Run#1 Run#1
+
+Table 17. Images corruptions in different groups.
+
+Input-aware
+
+LIRA
+
+SwinT-B
+
+WideResNet
+
+SwinT-B
+
+WideResNet
+
+AUROC F1 score AUROC F1 score AUROC F1 score AUROC F1 score
+
+0.936 0.939
+
+0.86 0.864
+
+0.423 0.383
+
+0.504 0.502
+
+0.994 0.994
+
+0.975 0.976
+
+0.696 0.684
+
+0.645 0.667
+
+Table 18. The additional random runs of STRIP on ImageNet200
+
+Dataset CIFAR10 GTSRB CIFAR100 Tiny-ImageNet ImageNet200
+
+Accuracy
+Trigger Samples Clean Images
+Trigger Samples Clean Images
+Trigger Samples Clean Images
+Trigger Samples Clean Images
+Trigger Samples Clean Images
+
+Badnets
+93.38 96.91
+91.62 94.28
+87.98 96.17
+17.94 98.41
+1.39 99.07
+
+Blended
+79.40 96.91
+97.05 94.28
+77.54 96.17
+99.32 98.41
+98.03 0.00
+
+LF
+54.41 96.91
+82.01 94.28
+58.47 96.17
+54.80 98.41
+-
+
+Input-aware
+99.89 96.91
+73.18 94.28
+98.58 96.17
+99.94 98.41
+100.00 37.20
+
+Wanet
+3.74 96.91
+3.98 94.28
+1.87 96.17
+4.75 98.41
+0.72 99.07
+
+LIRA
+64.84 96.91
+10.50 94.28
+81.42 96.17
+82.64 98.41
+86.90 37.20
+
+SSBA
+59.29 96.91
+12.97 94.28
+54.02 96.17
+92.23 98.41
+94.67 99.07
+
+Table 19. The effectiveness of FreqDetector in its original mode
+
+(a) Ours
+
+(b) STRIP
+
+Figure 7. ROC of detecting all-to-all attacks
+
+attack) where every class in the victim model is attacked and the backdoor trigger can cause a specific transition of trigger samples’ labels (e.g., turning yi to yi + 3). We investigate TeCo and two baselines against the all-to-all attack on PreActResNet18/GTSRB13. As depicted in Fig. 7(d)-(e), the performance of our method drops about 20% in this scenario but still maintains stability across different attacks. STRIP has lost its performance totally and even makes contrary predictions. Since FreqDetector makes judgments only based on the images, it maintains its performance as
+13We find all-to-all backdoor attacks are not stable enough on other datasets and cause difficulties to do evaluations.
+
+the same as which Tab. 11 shows. Fortunately, TeCo is still comparable with FreqDetector in this worst-case setting as demonstrated in Tab. 20.
+
+Method
+STRIP FreqDetector
+Ours
+
+Avg. of AUROC
+0.3930 0.7911 0.7749
+
+Avg. of F1 score
+0.5026 0.7671 0.7856
+
+Std. of AUROC
+0.0997 0.2235 0.0306
+
+Std. of F1 score
+0.0027 0.2027 0.0336
+
+Table 20. Quantization results of detecting all-to-all attacks
+Smaller triggers. The results show that TeCo is effective and even more strong against the backdoor attack with smaller triggers.
+
+Size
+7*7 14*14 21*21
+
+% of image
+0.10 0.39 0.88
+
+AUROC(↑)
+0.9963 0.9973 0.9784
+
+F1 score(↑)
+0.9969 0.9974 0.9782
+
+ACC(↑)
+99.69 99.74 97.82
+
+FAR(↓)
+0.60 0.49 4.12
+
+FRR(↓)
+0.01 0.02 0.23
+
+BDR(↑)
+99.99 99.98 99.77
+
+Table 21. ImageNet200 / SwinT-Base
+
+Transferability to unseen attacks. The results show in Tab. 22 that TeCo is effective against unseen attacks after optimizing a threshold using a known attack.
+
+Badnets Blended
+
+ACC FAR FRR BDR
+ACC FAR FRR BDR
+
+Badnets
+-
+0.9169 0.1119 0.0511 0.9489
+
+Blended
+0.9451 0.1017 0.0029 0.9971
+-
+
+LF
+0.9339 0.1155 0.0112 0.9888
+0.9366 0.1099 0.0117 0.9883
+
+Input-Aware
+0.8647 0.2096 0.0528 0.9472
+0.8703 0.1987 0.0531 0.9469
+
+Wanet
+0.8559 0.1987 0.0833 0.9167
+0.8629 0.1849 0.0840 0.9160
+
+LIRA
+0.9322 0.1183 0.0117 0.9883
+0.9215 0.1138 0.0392 0.9608
+
+SSBA
+0.8475 0.1641 0.1396 0.8604
+0.8324 0.1590 0.1771 0.8229
+
+AVG
+0.8966 0.1513 0.0502 0.9498
+0.8901 0.1464 0.0694 0.9306
+
+Table 22. CIFAR10 / PreActResNet18
+
+Corruptions as data augmentations. The results show that the degradation of performance is not large when the backdoor attacks use corruption for data augmentation.
+
+Augmentation Aug, 50%
+
+Metric AUROC(↑) F1 score(↑)
+BDR(↑)
+
+Badnets 0.9040 0.8890 93.77
+
+Blended 0.9038 0.8863 95.51
+
+SSBA 0.8968 0.8922 95.31
+
+AVG 0.9015 0.8892 94.86
+
+Table 23. GTSRB / MobileViT-xs
+More recent attacks. We show additional results on detecting Sleeper Agent [38].
+
+Attack AUROC(↑) F1 score(↑) ACC(↑) FAR(↓) FRR(↓) BDR(↑)
+
+Sleeper 0.8897
+
+0.9325 93.25 10.80 2.70 97.30
+
+Table 24. CIFAR10 / PreActResNet18
+
+15
+
+Severity 0 1 2 3 4 5 Gaussian Noise
+
+Severity 0 1 2 3 4 5 Gaussian Noise
+
+Shot Noise
+
+Shot Noise
+
+Impulse Noise
+
+Impulse Noise
+
+Defocus Blur
+
+Defocus Blur
+
+Glass Blur
+
+Glass Blur
+
+Motion Blur
+
+Motion Blur
+
+Zoom Blur
+
+Zoom Blur
+
+Snow
+
+Snow
+
+Frost
+
+Frost
+
+Fog
+
+Fog
+
+Brightness
+
+Brightness
+
+Contrast
+
+Contrast
+
+Elastic Transform
+
+Elastic Transform
+
+Pixelate
+
+Pixelate
+
+Jpeg Compression
+
+Jpeg Compression
+
+(a) Badnets / Tiny-ImageNet.
+
+(b) Input-aware / GTSRB.
+
+Figure 8. Visualization of trigger samples and their corrupted versions
+
+Insightful discussion of TeCo. As we discussed in Sec.6, the explanation of TeCo is very likely to be the dualtarget training function of backdoor attacks which leads to the huge bias of victim models. The bias makes victim models focus on the trigger patterns rather than the original information of trigger samples. When the trigger patterns encounter different corruptions, since some corruptions are in texture information while others are in structure information, the trigger will be robust against certain corruptions while not robust against others. And since clean images have more complex texture and structure information compared with trigger patterns which need to be simple and repetitive for causing bias, the clean images will have consistent robustness. In this paper, our main goal is to discover and introduce this phenomenon to the community with comprehensive empirical studies. A formal theoretical study will be our future work.
+
+Use TeCo to detect backdoor-infected models. As we have mentioned in our introduction, TeCo is a test-time trigger sample detection (TTSD) method that can seamlessly integrate into existing model diagnosis defenses for defense. In practice, defenders can first use model diagnosis defenses (e.g., AEVA [15], which also works in hard-label black-box settings) to judge whether the target model is a backdoor model. Then the defenders can use TeCo to detect the trigger samples. On the other hand, TeCo can be used to diagnose the model. Our study shows that for the clean samples on clean models, the FAR of TeCo will be high when applying thresholds calculated from the backdoor model (Avg. FAR≈ 55% on GTSRB/PreActResNet18 clean model). So defenders may feed a batch of clean images into the target model, and calculate the FAR of TeCo to judge whether the target model is a backdoor model.
+
+16
+

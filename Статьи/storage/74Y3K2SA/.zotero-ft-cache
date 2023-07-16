@@ -1,0 +1,80 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2301.11824
+
+Help | Advanced Search
+Search
+Computer Science > Cryptography and Security
+(cs)
+[Submitted on 27 Jan 2023]
+Title: PECAN: A Deterministic Certified Defense Against Backdoor Attacks
+Authors: Yuhao Zhang , Aws Albarghouthi , Loris D'Antoni
+Download a PDF of the paper titled PECAN: A Deterministic Certified Defense Against Backdoor Attacks, by Yuhao Zhang and 2 other authors
+Download PDF
+
+    Abstract: Neural networks are vulnerable to backdoor poisoning attacks, where the attackers maliciously poison the training set and insert triggers into the test input to change the prediction of the victim model. Existing defenses for backdoor attacks either provide no formal guarantees or come with expensive-to-compute and ineffective probabilistic guarantees. We present PECAN, an efficient and certified approach for defending against backdoor attacks. The key insight powering PECAN is to apply off-the-shelf test-time evasion certification techniques on a set of neural networks trained on disjoint partitions of the data. We evaluate PECAN on image classification and malware detection datasets. Our results demonstrate that PECAN can (1) significantly outperform the state-of-the-art certified backdoor defense, both in defense strength and efficiency, and (2) on real back-door attacks, PECAN can reduce attack success rate by order of magnitude when compared to a range of baselines from the literature. 
+
+Subjects: 	Cryptography and Security (cs.CR) ; Machine Learning (cs.LG)
+Cite as: 	arXiv:2301.11824 [cs.CR]
+  	(or arXiv:2301.11824v1 [cs.CR] for this version)
+  	https://doi.org/10.48550/arXiv.2301.11824
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Yuhao Zhang [ view email ]
+[v1] Fri, 27 Jan 2023 16:25:43 UTC (3,456 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled PECAN: A Deterministic Certified Defense Against Backdoor Attacks, by Yuhao Zhang and 2 other authors
+    PDF
+    Other formats 
+
+Current browse context:
+cs.CR
+< prev   |   next >
+new | recent | 2301
+Change to browse by:
+cs
+cs.LG
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

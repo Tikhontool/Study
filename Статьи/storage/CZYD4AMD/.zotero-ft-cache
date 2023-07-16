@@ -1,0 +1,82 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2212.11751
+
+Help | Advanced Search
+Search
+Computer Science > Cryptography and Security
+(cs)
+[Submitted on 22 Dec 2022]
+Title: Mind Your Heart: Stealthy Backdoor Attack on Dynamic Deep Neural Network in Edge Computing
+Authors: Tian Dong , Ziyuan Zhang , Han Qiu , Tianwei Zhang , Hewu Li , Terry Wang
+Download a PDF of the paper titled Mind Your Heart: Stealthy Backdoor Attack on Dynamic Deep Neural Network in Edge Computing, by Tian Dong and 5 other authors
+Download PDF
+
+    Abstract: Transforming off-the-shelf deep neural network (DNN) models into dynamic multi-exit architectures can achieve inference and transmission efficiency by fragmenting and distributing a large DNN model in edge computing scenarios (e.g., edge devices and cloud servers). In this paper, we propose a novel backdoor attack specifically on the dynamic multi-exit DNN models. Particularly, we inject a backdoor by poisoning one DNN model's shallow hidden layers targeting not this vanilla DNN model but only its dynamically deployed multi-exit architectures. Our backdoored vanilla model behaves normally on performance and cannot be activated even with the correct trigger. However, the backdoor will be activated when the victims acquire this model and transform it into a dynamic multi-exit architecture at their deployment. We conduct extensive experiments to prove the effectiveness of our attack on three structures (ResNet-56, VGG-16, and MobileNet) with four datasets (CIFAR-10, SVHN, GTSRB, and Tiny-ImageNet) and our backdoor is stealthy to evade multiple state-of-the-art backdoor detection or removal methods. 
+
+Comments: 	Accepted to IEEE INFOCOM 2023
+Subjects: 	Cryptography and Security (cs.CR) ; Machine Learning (cs.LG)
+Cite as: 	arXiv:2212.11751 [cs.CR]
+  	(or arXiv:2212.11751v1 [cs.CR] for this version)
+  	https://doi.org/10.48550/arXiv.2212.11751
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Tian Dong [ view email ]
+[v1] Thu, 22 Dec 2022 14:43:48 UTC (1,712 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Mind Your Heart: Stealthy Backdoor Attack on Dynamic Deep Neural Network in Edge Computing, by Tian Dong and 5 other authors
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.CR
+< prev   |   next >
+new | recent | 2212
+Change to browse by:
+cs
+cs.LG
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

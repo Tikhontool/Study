@@ -1,0 +1,942 @@
+OVLA: NEURAL NETWORK OWNERSHIP VERIFICATION USING LATENT WATERMARKS
+
+arXiv:2306.13215v2 [cs.CR] 26 Jun 2023
+
+Feisi Fu Division of Systems Engineering
+Boston University Boston, MA 02215 fufeisi@bu.edu
+
+Wenchao Li Department of Electrical and Computer Engineering
+Boston University Boston, MA 02215 wenchao@bu.edu
+
+ABSTRACT
+Ownership verification for neural networks is important for protecting these models from illegal copying, free-riding, re-distribution and other intellectual property misuse. We present a novel methodology for neural network ownership verification based on the notion of latent watermarks. Existing ownership verification methods either modify or introduce constraints to the neural network parameters, which are accessible to an attacker in a white-box attack and can be harmful to the network’s normal operation, or train the network to respond to specific watermarks in the inputs similar to data poisoning-based backdoor attacks, which are susceptible to backdoor removal techniques. In this paper, we address these problems by decoupling a network’s normal operation from its responses to watermarked inputs during ownership verification. The key idea is to train the network such that the watermarks remain dormant unless the owner’s secret key is applied to activate it. The secret key is realized as a specific perturbation only known to the owner to the network’s parameters. We show that our approach offers strong defense against backdoor detection, backdoor removal and surrogate model attacks.In addition, our method provides protection against ambiguity attacks where the attacker either tries to guess the secret weight key or uses fine-tuning to embed their own watermarks with a different key into a pre-trained neural network. Experimental results demonstrate the advantages and effectiveness of our proposed approach.
+1 Introduction
+Deep neural networks (DNNs) have demonstrated impressive performances on a wide variety of applications ranging from image recognition Krizhevsky et al. [2012] to protein folding Jo et al. [2015]. Obtaining these levels of performance often requires constructing large models with many parameters. For example, the well-known VGG-16 network Simonyan and Zisserman [2014] has about 138 million parameters, not to mention that the more recent large-scale language models like GPT-3 Floridi and Chiriatti [2020] which has 175 billion parameters. Training these models are expensive – requires a large amount of good-quality training data Krizhevsky et al. [2012], dedicated GPU clusters Patterson et al. [2021], days if not weeks to train Patterson et al. [2021], and specialized tuning Sada [2021]. Given the high cost of developing and training these models and the massive profits that they may help generate, these models are valuable intellectual properties (IPs) to their owners and it is important to protect them from misuse such as illegal copying, re-distribution, and free-riding. In this paper, we refer to the type of schemes that aim that ascertaining the ownership of a neural network ownership verification (OV).
+Most approaches for neural network ownership verification employ some form of digital watermarks. In the context of DNNs, the watermark information is embedded into a hosting DNN Uchida et al. [2017], Nagai et al. [2018], Adi et al. [2018], Zhang et al. [2018], Ma et al. [2021], Wang et al. [2021]. A DNN model can then be queried to extract the watermark or verify the presence of a watermark. Existing methods of DNN watermarking roughly fall into the following two categories.
+1. Static Watermarking. The idea is to embed watermark information into the weights of a DNN. Representative techniques include adding a parameter regularization term to the DNN loss function and then verifying the ownership
+
+OVLA
+
+A PREPRINT
+
+of the DNN by parameter projection Uchida et al. [2017], Nagai et al. [2018], and generating a matrix as a fingerprint of the DNN and inserting the fingerprint by adding a penalty term to force the user-selected parameters to be close to the fingerprint matrix Chen et al. [2019]. One problem of such approaches is that the additional parameter constraints can degrade the DNN’s performance for normal operation. In addition, it has been shown that most static watermark schemes are vulnerable to watermark removal attacks such as model compression Cheng et al. [2017], fine-tuning Wang and Kerschbaum [2019a], and watermark overwrites Wang and Kerschbaum [2019b]. A recent paper leverages this insight to embed a parameter mask as the watermark such that the network would still have high accuracy when it is pruned using this mask Chen et al. [2021a]. However, one potential issue with this approach is that a user-designed mask limits the structure of pruned model and can hinder training. Finally, it is also worth noting that an OV scheme that uses static watermarks requires a judge or the owner to have white-box access to the DNN in question.
+2. Dynamic Watermarking. The idea is to train the DNN to produce specific outputs when a pre-determined watermark is present in the input Adi et al. [2018], Zhang et al. [2018], Yang et al. [2021]. Given the connection to backdoor attacks on neural networks Gu et al. [2017], this approach is sometimes referred to backdoor-based watermarks. In a similar vein, authors of Le Merrer et al. [2020] propose to use adversarial perturbations of certain training examples as watermarks. When separate training instances are used as watermarked inputs, these inputs are also called a trigger set in the literature Fan et al. [2019]. An advantage of dynamic watermarking is that it allows the owner to probe the DNN in question by supplying watermarked inputs and observing the DNN’s outputs without white-box access to the network. However, similar to static watermarking schemes, dynamic watermarking is also susceptible to watermark removal attacks via fine-tuning, model pruning or watermark overwriting Boenisch [2020]. In addition, dynamic watermarking schemes is vulnerable to surrogate model attacks Dong et al. [2021], i.e. an attacker can create a surrogate DNN by querying the victim model and then extract the watermark information through trigger reverse-engineering Wang et al. [2019].
+In addition to watermark removal and surrogate model attacks, ambiguity attacks Craver et al. [1998], Fan et al. [2019] post significant challenges to DNN ownership verification. These attacks aim at casting doubt on the ownership of a DNN by forging additional watermarks on top of the original ones. An effort aimed at foiling this type of attacks adds a so-called passport layer after each convolutional layer to modulate the performance of the network depending on the correctness of the user-supplied passport Fan et al. [2019]. However, due to the coupling of passport learning and model learning, there is a substantial drop in normal-operation performance. On the other hand, distributing the passports along with the models for normal operation cannot prevent illegal copying or re-distribution. A subsequent work extended this idea by removing the need to change the network’s architecture and training a passport-aware branch that is only added during ownership verification Zhang et al. [2020]. However, it still suffers from performance degradation compared to a normally trained model. Another work applies the passport idea which was originally developed for convolutional neural networks to watermarking generative adversarial networks Ong et al. [2021].
+In this paper, we propose OVLA (ownership verification using latent watermarks), a novel DNN ownership verification methodology with strong performance guarantee, defense against backdoor detection, backdoor removal, surrogate model attacks and ambiguity attacks. The key idea of OVLA is to decouple the network’s normal operation from its responses to watermarked inputs during ownership verification. Instead of limiting the passport to the normalization layers of the DNN such as in Fan et al. [2019], Zhang et al. [2020], we show that it is possible to realize the passport (called secret weight key in this paper) as a perturbation to the weights of almost any layer in the network. Compared with existing approaches, OVLA provides provably guarantee on the network’s performance during normal operation. We show that OVLA-watermarked DNNs can effectively evade backdoor detection techniques, are immune to surrogate model attacks, and are resistant to watermark removal methods such as fine-tuning and model pruning. In addition, OVLA offers strong defense against ambiguity attacks where the attacker either tries to guess the secret weight key or uses fine-tuning to embed their own watermarks with a different key into a pre-trained neural network. The latter type of ambiguity attacks is unexplored in current literature. Figure 1 illustrates the high-level ownership verification flow of OVLA, where the user registration mechanism is designed specifically for guarding against the second type of ambiguity attacks (details in Section 2.7). We summarize our contributions below.
+1. We present OVLA, a novel DNN ownership verification methodology that effectively decouples ownership verification from the DNN’s normal operation.
+2. We provide theoretical analysis to show that OVLA is the first DNN ownership verification method with provable performance guarantees and strong defenses against surrogate model attacks and fine-tuning-based ambiguity attacks. The latter is not explored in current literature.
+3. Across a set of benchmarks, OVLA- watermarked DNNs show strong empirical resistance against backdoor detection, backdoor removal, key guessing-based ambiguity attacks.
+
+2
+
+OVLA
+
+A PREPRINT
+
+User Registration
+
+Watermark Embedding by Alice using 𝛿!
+
+Verification by Alice using 𝛿!
+
+Trusted Authority
+
+𝛿"
+
+𝛿!
+
+Bob
+
+Alice
+
+Clean Image Watermarked Image
+
+11…1
+
+𝛿!=
+
+1 ⋮
+
+0 ⋮
+
+… ⋱
+
+1 ⋮
+
+01…1
+
+Watermark Verified
+
+Verification by Bob using 𝛿"
+
+00…0
+
+𝛿" =
+
+0 ⋮
+
+1 ⋮
+
+… ⋱
+
+0 ⋮
+
+10…0
+
+11…1
+
+𝛿!=
+
+1 ⋮
+
+0 ⋮
+
+… ⋱
+
+1 ⋮
+
+01…1
+
+Secret Weight Key 𝛿!
+
+Latent Watermarked Model
+
+00…0
+
+𝛿" =
+
+0 ⋮
+
+1 ⋮
+
+… ⋱
+
+0 ⋮
+
+10…0
+
+Figure 1: Flow chart of OVLA.
+
+Watermark Verification
+Failed
+
+2 Background
+2.1 Deep Neural Networks
+An R-layer feed-forward DNN f = κR ◦ σ ◦ κR−1 ◦ ... ◦ σ ◦ κ1 : X → Y is a composition of linear functions κr, r = 1, 2, ..., R and activation function σ, where X ⊆ Rm is the input domain and Y ⊆ Rn is the output domain. For 0 ≤ r ≤ R, we call fr = σ ◦ κr the r-th layer of DNN f and we denote the weights and biases of fr, Wr and br respectively. We use θ = {Wr, br}rr==R1 to denote the set of parameters in f , and we write f (x) as f (x; θ).
+2.2 Digital Watermarking
+In general, digital watermarking refers to a technique that embeds a message, called watermark information, into a hosting multimedia content. In this paper, we consider zero-bit watermark which is also known as ownership verification. In general, a watermarking technique includes two parts: embedding and extraction (verification). (1) For embedding, an embedding function E takes some watermark information W and a carrier model M and output a watermarked model M ′ = E(M, W ). (2a) For extraction, the goal is to extract the watermark information W ′ (potentially different from W due to imperfect extraction) from a watermarked model M ′. We use D to denote the extraction function such that W ′ = D(M ′). (2b) During ownership verification, the verification function D takes W and M ′ as inputs and outputs D(W, M ′) = {True, False}.
+2.3 Backdoor Attacks
+We consider data poisoning-based backdoor attacks that train a DNN with a portion of the training data modified to include pre-determined trigger pattern(s) and their target label(s). An example trigger pattern is a small yellow square pasted on a specific location of an image. The training process will force the DNN to associate any image with the trigger pattern to the target label. We call f a backdoored DNN if it has a high accuracy on clean data and classifies trigger data to its target label.
+2.4 Zero-bit Backdoor-based Watermarking
+We consider zero-bit backdoor-based watermark which applies backdoor attacks as the watermark embedding function and then verifies the presence of the watermark by checking the network’s accuracy on a set of inputs with the trigger added (henceforth called a trigger set for convenience)1.
+1We note the difference between using a trigger set from the training data and using any input sets tainted with the trigger pattern for watermark verification. The latter is more general and is what we use here.
+
+3
+
+OVLA
+
+A PREPRINT
+
+The embedding process is to train a DNN f = E(D, DT , TL) with additional trigger data DT and trigger labels TL, where D is the original training data.
+
+Watermark verification is to verify the watermarked DNN’s accuracy on trigger data, TL′ = D(f, DT ), where TL′ is the DNN’s prediction on trigger data. If TL′ is close to TL, then the verification is considered successful. Formally, the verification process is to check if
+
+P rx∈DT [arg max f (x) ̸= TL(x)] ≤ ϵ
+
+(1)
+
+where ϵ is a user-defined threshold and arg max is to take the label with the maximal probability as predicted by f .
+
+2.5 Adversarial Weight Perturbation
+Adversarial weight perturbation (AWP) has been introduced for improving the robustness of a neural network Wu et al. [2020]. Several existing works Rakin et al. [2020], Chen et al. [2021b], Garg et al. [2020], Ning et al. [2022] show that adversarial weight perturbation can be used in place of data poisoning to introduce a backdoor to a DNN.
+For a DNN f (x; θ), we call δ an AWP if by adding δ to the weight parameters θ, the resulting DNN f (x; θ + δ) is is a backdoored DNN for some trigger set known to the attacker.
+
+2.6 Surrogate Model Attacks
+In a surrogate model attack, the attacker treats the victim watermarked DNN as a black-box and tries to replicate its functionality by constructing a surrogate model that is trained from repeated input-output queries on the victim DNN. The attacker then reverse-engineers the watermark information from the surrogate model Li et al. [2021], Gou et al. [2021].
+
+2.7 Ambiguity Attacks
+Ambiguity attacks aim to cast doubt on the ownership of the model Craver et al. [1998]. The ambiguity arises when two separate parties can both claim ownership of the model by demonstrating successful ownership verification on their chosen watermarks. In this paper, we consider two kinds of ambiguity attacks:
+1. Free-rider Attacks. The attackers, known as free riders, benefit from the system without contributing their fair share Lin et al. [2019]. In DNN OV, a free-rider is an attacker who embeds their own watermark into a DNN which was not trained by them. In particular, we consider the setting where the attacker fine-tunes a pre-trained DNN to embed their own watermark.
+2. Key Guessing Attacks. The goal of these attacks is to guess the secret weight key or find a substituted key (and the associated trigger set) to claim ownership of the target DNN.
+
+2.8 Free-rider Attacks vs. Key Guessing Attacks.
+With a slight abuse of the terminology, we use free-rider attacks to refer to attacks that require modifying a pre-trained DNN in a relatively inexpensive way to claim ownership (i.e. they are almost free-riders), and key guessing attacks to refer to attacks that try to “guess" the watermark information and do not require modifying the DNN.
+
+3 Overview of OVLA
+In this section, we introduce the OVLA scheme, which includes: (1) User Registration, (2) Latent Watermark Embedding, and (3) Latent Watermark Verification (Figure 2).
+The key idea of OVLA is to train the network such that the watermarks remain dormant unless the owner’s secret key is applied to activate it. This highlights a fundamental difference between OVLA and existing dynamic watermarking schemes: instead of directly verifying the trigger-set accuracy of the trained DNN f (x; θ), OVLA verifies the trigger-set accuracy of DNN fˆ = f (x; θ + δ) where δ is the owner’s secret weight key and we call f (x; θ + δ) the unlocked DNN. In addition, f is trained in such a way that it does not respond to the trigger.
+3.1 User Registration
+We propose to include a trusted authority (TA) which applies a registration function R to any user who wishes to register under the OVLA system. The trusted authority plays a similar role as the certificate authority in public-key infrastructure
+
+4
+
+OVLA
+
+A PREPRINT
+
+Normal Operation
+
+11…1
+
+𝛿=
+
+1 ⋮
+
+0 ⋮
+
+… ⋱
+
+1 ⋮
+
+01…1
+
+Apply Secret Weight Key 𝜃 → 𝜃+𝛿
+
+Watermark Verification
+
+Apply Trigger
+
+Apply Trigger
+
+Classify as 5
+
+Classify as 5
+
+Classify as 5
+
+Classify as 𝟎
+
+Figure 2: Left: Watermarked DNN, which behaves like a clean DNN, and does not respond to the watermarked input. Right: Unlocked DNN, which is used for ownership verification and correctly maps a watermarked input to its target class (class 0).
+
+and can double as a judge in ownership disputes. R takes a user-defined string as input and outputs a secret weight key which is issued to the user.
+The reason of having a trusted authority is to prevent users from registering a self-designed secret weight key. A non-centralized registration could be built if all the users agree to use the same public one-way function Goldreich as the registration function. The property of a one-way function would make it extremely costly to register a self-designed secret weight key.
+
+3.2 Latent Watermark Embedding
+
+The watermark is latent in the sense that the network does not respond to it unless the secret weight key is applied.
+Latent watermarks are embedded during training using a specially crafted loss function. We use L1(θ) to denote the loss for DNN’s normal operation on a clean dataset D (with a label function CL). To embed a latent watermark, we use a latent watermark dataset DT , which is a subset of clean data injected with the watermark (with a label function TL) and a pre-determined secret weight key δ. To separate the DNN’s normal operation from latent watermark verification,
+we define the latent watermark loss L2 as the sum of following three terms:
+
+L2(θ) =
+
+L(f (x; θ), CL(x)) + λ1 L(f (x; θ + δ), CL(x)) + λ2
+
+L(f (x; θ + δ), TL(x))
+
+x∈DT
+
+x∈D
+
+x∈DT
+
+where λ1, λ2 are hyperparameters that control the importance of each term. The first term is used to force the DNN not to respond to latent watermarks without the secret weight key, thereby avoiding leaking any watermark information. The last two terms are designed for latent watermark verification which we will explain in more detail in Section 3.3. Finally, the loss function for the DNN training process is a weighted sum of L1 and L2.
+
+3.3 Latent Watermark Verification
+
+To claim the ownership of a DNN f , one should have a registered secret weight key δ, a latent watermark set DT and a trigger label function TL. Formally, the verification process is to check if
+
+P rx∈D[arg max f (x; θ + δ) ̸= CL(x)] ≤ ϵ1 P rx∈DT [arg max f (x; θ + δ) ̸= TL(x)] ≤ ϵ2
+
+(2)
+
+where θ is the parameter of f and ϵ1, ϵ2 are user-defined thresholds.
+For a latent watermarked DNN f , minimizing the last two terms in loss function 2 force the perturbed DNN fˆ to map any clean data x to its label CL(x) and any latent watermark data to its trigger label TL(x). Therefore, the ownership of a DNN trained with loss function 2 can be verified the owner with the corresponding secret weight key.
+
+5
+
+OVLA
+
+A PREPRINT
+
+4 Analysis of OVLA
+
+4.1 Performance Guarantee
+In this section, we provide theoretical support on how OVLA’s scheme of decoupling the DNN’s normal operation and the backdoor-based ownership verification can preserve the performance of the target DNN. First, we show that any continuous function can be approximated by f (x; θ) where f (x; θ + δ) is a backdoored DNN.
+To this end, we consider a stronger version which requires showing that any C(Rm+k, Rn) function can be approximated by f (x; θ + δ), where we take (x, δ) ∈ Rm+k as variables and θ as the parameter of this function. Theorem 1 (Universal Approximation Theorem for Parameter Space). Suppose f (x; θ) is a fully connected feedforward neural network with more than four hidden layers. δ is a perturbation for the weights of a single layer which is between the 2nd hidden layer and the last 2nd layer inclusive. We claim that the resulting neural network f (x; θ + δ) is a universal approximation for any C(Rm+k, Rn), where k is the dimension of δ. That is, for any g : Rm+k → Rn, there exists a θ such that sup ||f (x; θ + δ) − g(x, δ)|| < ϵ. Corollary 1 (Performance Guarantee). Suppose f (x; θ) is a feed-forward neural network with more than four hidden layers. For any non-zero weight perturbation δ which has the same size as the weight of a single layer between the 2nd hidden layer and the last 2nd layer inclusive. Then by the Universal Approximation Theorem for Parameter Space, there exists a secret weight key δ such that f (x; θ) can approximate any continuous function where f (x; θ + δ) is a backdoored DNN.
+Corollary 1 also ensures that OVLA can work for any secret weight key issued by the trusted authority.
+
+4.2 Defense against Backdoor Detection
+We consider backdoor detection techniques based on reverse-engineering the trigger and its target class. Neural Cleanse Wang et al. [2019] is a good representative of these techniques. It assumes a white-box model where the attacker has access to the DNN parameters and uses a gradient-based optimization method to reverse-engineer the trigger and its target class. Such backdoor detection methods can be used by an attacker to extract the watermark information for a backdoor-based watermarked DNN.
+For OVLA, without the secret weight key δ, the watermarked DNN does not respond to the latent watermark. Therefore, for attackers who do not have knowledge of δ, such backdoor detection methods will not identify the latent watermarks. An experiment in Section 5 shows that the latent watermarked DNNs are indeed closer to clean DNNs than to backdoored DNNs.
+
+4.3 Immunity to Surrogate Model Attacks
+
+Surrogate model attacks target both static and dynamic watermarking schemes, since the watermark information (i.e. DNN’s weights for static watermarking and the trigger and its target class for dynamic watermarking) could be leaked by performing input-output queries on the target model. On the contrary, a latent watermarked DNN does not respond to the watermarks unless the secret weight key is applied and thus the watermark information would not be leaked through input-output queries.
+
+In the following theorem, we claim that OVLA is immune to surrogate model attacks due to the arbitrariness of the unlocked DNN, i.e. it is not possible to recover f (x; θ + δ) given only input-output queries of f (x; θ).
+
+Theorem 2 (Immunity to Surrogate Model Attacks). Suppose f (x; θ) is a latent watermarked DNN with non-zero secret weight key δ, D is the clean dataset and DT is the trigger set. For any ϵ > 0, there exists another DNN f (x; θ′):
+
+1. P rx∈D[arg max f (x; θ) ̸= arg max f (x; θ′)] ≤ ϵ;
+
+2.
+
+P rx∈DT [arg max f (x; θ
+
++
+
+δ)
+
+=
+
+arg max f (x; θ′
+
++ δ)]
+
+≤
+
+1 c
+
++
+
+ϵ.
+
+4.4 Immunity to Free-Rider Attacks
+
+To the best of our knowledge, existing DNN OV techniques do not offer protection against free-rider attacks. Specifically, a (almost) free-rider can fine-tune (which is much less expensive than training) a pre-trained DNN which does not belong to them to embed their own watermarks and then claim ownership of the resulting DNN.
+For OVLA, while we do not directly prohibit embedding watermarks through fine-tuning, the following theorem shows that using fine-tuning to embed a latent watermark is as expensive as (re)training from scratch. Thus, there is no incentive for an attacker to forge their own latent watermarks on a pre-trained model this way.
+
+6
+
+OVLA
+
+A PREPRINT
+
+MNIST
+
+CIFAR10
+
+GTSRB
+
+#L AC
+
+AW ACU AWU
+
+AC
+
+AW
+
+ACU AWU
+
+AC
+
+AW ACU AWU
+
+0 98.03% 9.82% -
+
+-
+
+78.67% 10.88% -
+
+-
+
+91.79% 0.25%
+
+-
+
+-
+
+1 97.96% 9.85% 97.0% 100.0% 80.85% 10.48% 67.63% 99.99% 90.36% 0.43% 88.8% 99.97%
+
+2 97.87% 9.8% 97.88% 100.0% 79.99% 8.95% 70.7% 100.0% 90.56% 0.63% 88.1% 99.93%
+
+3 98.07% 9.83% 97.94% 100.0% 78.43% 10.06% 74.22% 99.99% 92.06% 0.4% 92.16% 99.98%
+
+4
+
+-
+
+-
+
+-
+
+-
+
+81.63% 9.97% 80.51% 100.0% 92.67% 0.54% 92.46% 99.99%
+
+Table 1: The performance of OVLA generated watermark on MNIST/CIFAR10/GTSRB. All models are train with 100 epochs. #L: The layer that secret weight key lies on (L=0 is the performance of a non-watermarked DNN).
+
+Theorem 3 (Immunity to Free-Rider Attacks). If the secret weight key δ is non-sparse and ||δ||2 is large enough, then θ + δ is close to a normal distribution on the whole parameter space, where θ is the parameter of a pre-trained DNN f (x, θ). Therefore, embedding δ into f (x, θ) via fine-tuning is as difficult as retraining from scratch.
+5 Experiments
+In this section, we implement OVLA on a set of DNN models and evaluate their performances under backdoor detection, key guessing attacks, and watermark removal via model pruning and fine-tuning. The experiments are designed to answer the following questions: 1. How do the OVLA-watermarked DNNs perform relatively to normally trained DNNs on clean data? 2. How well does OVLA protect the watermarked models against key guessing attacks? 3. Can the OVLA-watermarked DNNs evade backdoor detection methods such as Neural Cleanse? 4. How well does the OVLA-watermarked DNNs resist watermark removal techniques such as model pruning and fine-tuning? We use the following evaluation metrics: 1. AC: the accuracy of a watermarked DNN on clean test data; 2. AW: the accuracy of a watermarked DNN on latent watermark data (the trigger set); 3. ACU: the accuracy of a unlocked DNN (after the secret weight key is applied) on clean test data; 4. AWU: the accuracy of a unlocked DNN on latent watermark data.
+5.1 OVLA on MNIST/CIFAR10/GTSRB
+We train a OVLA-watermarked DNN on MNIST LeCun [1998]/CIFAR10 Krizhevsky et al. [2009]/GTSRB Stallkamp et al. [2012] separately. For MNIST, we use a three-layer multilayer perceptron; for CIFAR10, we use vgg16_comp Simonyan and Zisserman [2014]; for GTSRB, we use a six-layer convolutional neural network O’Shea and Nash [2015]. More details about the DNN structure and the training hyperparameters can be found in the Supplemental Material. We then verify each OVLA-watermarked DNN on both clean data and latent watermark data. The results are presented in Table 1. The performance of the OVLA-watermarked DNNs on clean data is very close to (and sometimes even better than) the performance of non-watermarked DNNs. For the watermark data, the unlocked DNNs f (x, θ + δ) achieve >99.93% AWU for all cases.
+5.2 Defense against Key Guessing Attacks
+We train a OVLA-watermarked DNN for each of the datasets MNIST/CIFAR10/GTSRB. We then sample 100 randomly generated weight key from a high dimensional uniform distribution (every entry is drawn from a uniform distribution between 0 and 1) and then perform ownership verification for the OVLA-watermarked DNN unlocked using a random weight key. From Figure 3, we can observe that all the randomly sampled keys fail the ownership verification.
+5.3 Defense against Backdoor Detection
+We use the implementation of Neural Cleanse Wang et al. [2019] in TrojanZoo Pang et al. [2022] to evaluate how well OVLA-watermarked DNNs can evade backdoor detection. The GTSRB dataset is omitted because it is not supported by
+7
+
+MNIST
+
+OVLA CIFAR10
+
+GTSRB
+
+A PREPRINT
+
+AWU
+
+ACU
+
+Figure 3: Defense against Key Guessing Attacks on MNIST/CIFAR10/GTSRB. The red dot corresponds to result of using the secret weight key δ. The blue dots correspond to results produced from using randomly guessed keys. We use ϵ1 = ϵ2 = 0.05 as the thresholds for latent watermark verification, i.e. any dot inside the red shaded area would be considered as verified.
+
+MNIST CIFAR10
+
+ACC Norm NormMD ACC Norm NormMD
+
+OVLA 99.920% 47.635
+1.868 0.080% 31.854 0.186
+
+Clean DNN 99.910% 77.725 0.034 0.010% 71.780 1.924
+
+BadNet Adi et al. [2018] 100.000% 2.177 -3.438 99.710% 7.490 -1.357
+
+Table 2: Neural Cleanse Wang et al. [2019] results for OVLA/Clean DNN/BadNet on MNIST/CIFAR10. Clean DNN is a DNN trained using only clean data; BadNet Adi et al. [2018] is used as a backdoor-based dynamic watermarking scheme. ACC: backdoor accuracy on the reverse-engineered trigger. Norm: L1 norm of the reverse-engineered trigger. NormMD: norm deviation of the reverse-engineered trigger (negative NormMD means the norm is less than the median and positive NormMD means the norm is greater than the median). A DNN is considered as a backdoored DNN if the backdoor accuracy is higher than some accuracy threshold (usually set to 90%) and the NormMD is less than some NormMD threshold (usually set to -1).
+
+TrojanZoo. Table 2 shows that the detection results of Neural Cleanse. We can observe that Neural Cleanse is not able to find any trigger with a small L1 norm2 for both OVLA and Clean DNN (DNNs trained normally on only clean data). Thus, OVLA-watermarked DNNs would be treated as Clean DNNs when inspected by backdoor detection methods like Neural Cleanse.
+5.4 Resistance to Model Pruning
+We train a OVLA-watermarked DNN on MNIST/CIFAR10 and then apply model pruning Cheng et al. [2017] to the OVLAwatermarked DNN. Pruning is applied to the last convolutional layer. We again use TrojanZoo for this evaluation Pang et al. [2022] and omit GTSRB since it is not yet supported by the tool. We report how the performances on clean data and watermarked data change as the ratio of pruning increases. Results for MNIST are included in Supplemental Material. In Figure 4, we can observe that OVLA’s performance is similar to that of clean DNN as the network is pruned – almost no accuracy (AC) drop even when 95% of neurons are pruned. On the contrary, for backdoor-based watermarks Adi et al. [2018], accuracy drops to 55% when 95% neurons are pruned. In fact, the OVLA-watermarked DNNs can still pass ownership verification when 97% neurons are pruned.
+5.5 Resistance to Fine-Tuning
+We train a OVLA-watermarked DNN on MNIST/MNIST/CIFAR10 and then fine-tune the trained DNN with 20% clean data from the training dataset. We then perform ownership verification on the fine-tuned DNN and record how its performance changes during fine-tuning. Results for using secret weight key on the first layer are reported in Table 3.
+2Note that empirically speaking, for any DNN, there almost always exists a universal adversarial perturbation Moosavi-Dezfooli et al. [2017] with a large enough L1 norm.
+8
+
+OVLA
+
+A PREPRINT
+
+Accuracy
+
+Ratio of Pruned Neurons
+
+Figure 4: Left: Accuracy on clean data during model pruning for OVLA/Clean DNN/Dynamic Watermark Adi et al. [2018]. Right: Ownership verification during model pruning.
+
+MNIST CIFAR10 GTSRB
+
+Epoch 0
+
+Epoch 50
+
+Epoch 100
+
+AC
+
+AW ACU AWU AC
+
+AW ACU AWU AC
+
+AW ACU
+
+97.96% 9.85% 97.0% 100.0% 98.02% 11.39% 95.38% 100.0% 98.0% 11.38% 92.18%
+
+80.85% 10.48% 67.63% 99.99% 80.44% 10.38% 66.26% 100.0% 80.14% 9.94% 66.11%
+
+90.78% 0.44% 89.02% 99.94% 90.74% 0.43% 89.11% 99.94% 90.74% 0.41% 89.11%
+
+Table 3: Ownership verification during fine-tuning on MNIST/CIFAR10/GTSRB.
+
+AWU 100.0% 99.99% 99.94%
+
+More result can be found in the Supplemental Material. Same as Section 5.2, we set ϵ = 5% as the threshold of watermark verification. Only one fine-tuned DNN (at the 91st epoch for MNIST) failed the watermark verification.
+6 Conclusion
+In this paper, we propose OVLA, a novel DNN ownership verification methodology that decouples ownership verification from the DNN’s normal operation. Our methodology has strong theoretical guarantees on normal operation performance, and defense against surrogate model attacks and free-rider attacks. In addition, OVLA-watermarked DNNs show strong empirical resistance to backdoor detection, backdoor removal, key guessing-based ambiguity attacks.
+References
+Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep convolutional neural networks. Advances in neural information processing systems, 25:1097–1105, 2012. 1
+Taeho Jo, Jie Hou, Jesse Eickholt, and Jianlin Cheng. Improving protein fold recognition by deep learning networks. Scientific reports, 5(1):1–11, 2015. 1
+Karen Simonyan and Andrew Zisserman. Very deep convolutional networks for large-scale image recognition. arXiv preprint arXiv:1409.1556, 2014. 1, 7, 13
+Luciano Floridi and Massimo Chiriatti. Gpt-3: Its nature, scope, limits, and consequences. Minds and Machines, 30(4): 681–694, 2020. 1
+David Patterson, Joseph Gonzalez, Quoc Le, Chen Liang, Lluis-Miquel Munguia, Daniel Rothchild, David So, Maud Texier, and Jeff Dean. Carbon emissions and large neural network training. arXiv preprint arXiv:2104.10350, 2021. 1
+Samuel O Sada. Improving the predictive accuracy of artificial neural network (ann) approach in a mild steel turning operation. The International Journal of Advanced Manufacturing Technology, 112(9):2389–2398, 2021. 1
+Yusuke Uchida, Yuki Nagai, Shigeyuki Sakazawa, and Shin’ichi Satoh. Embedding watermarks into deep neural networks. In Proceedings of the 2017 ACM on International Conference on Multimedia Retrieval, pages 269–277, 2017. 1, 2
+Yuki Nagai, Yusuke Uchida, Shigeyuki Sakazawa, and Shin’ichi Satoh. Digital watermarking for deep neural networks. International Journal of Multimedia Information Retrieval, 7(1):3–16, 2018. 1, 2
+Yossi Adi, Carsten Baum, Moustapha Cisse, Benny Pinkas, and Joseph Keshet. Turning your weakness into a strength: Watermarking deep neural networks by backdooring. In 27th USENIX Security Symposium (USENIX Security 18), pages 1615–1631, 2018. 1, 2, 8, 9
+9
+
+OVLA
+
+A PREPRINT
+
+Jialong Zhang, Zhongshu Gu, Jiyong Jang, Hui Wu, Marc Ph Stoecklin, Heqing Huang, and Ian Molloy. Protecting intellectual property of deep neural networks with watermarking. In Proceedings of the 2018 on Asia Conference on Computer and Communications Security, pages 159–172, 2018. 1, 2
+Haoyu Ma, Tianlong Chen, Ting-Kuei Hu, Chenyu You, Xiaohui Xie, and Zhangyang Wang. Undistillable: Making a nasty teacher that cannot teach students. arXiv preprint arXiv:2105.07381, 2021. 1
+Lixu Wang, Shichao Xu, Ruiqi Xu, Xiao Wang, and Qi Zhu. Non-transferable learning: A new approach for model ownership verification and applicability authorization. In International Conference on Learning Representations, 2021. 1
+Huili Chen, Bita Darvish Rouhani, Cheng Fu, Jishen Zhao, and Farinaz Koushanfar. Deepmarks: A secure fingerprinting framework for digital rights management of deep learning models. In Proceedings of the 2019 on International Conference on Multimedia Retrieval, pages 105–113, 2019. 2
+Yu Cheng, Duo Wang, Pan Zhou, and Tao Zhang. A survey of model compression and acceleration for deep neural networks. arXiv preprint arXiv:1710.09282, 2017. 2, 8
+Tianhao Wang and Florian Kerschbaum. Attacks on digital watermarks for deep neural networks. In ICASSP 2019-2019 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP), pages 2622–2626. IEEE, 2019a. 2
+Tianhao Wang and Florian Kerschbaum. Robust and undetectable white-box watermarks for deep neural networks. arXiv preprint arXiv:1910.14268, 1(2), 2019b. 2
+Xuxi Chen, Tianlong Chen, Zhenyu Zhang, and Zhangyang Wang. You are caught stealing my winning lottery ticket! making a lottery ticket claim its ownership. Advances in Neural Information Processing Systems, 34, 2021a. 2
+Peng Yang, Yingjie Lao, and Ping Li. Robust watermarking for deep neural networks via bi-level optimization. In Proceedings of the IEEE/CVF International Conference on Computer Vision, pages 14841–14850, 2021. 2
+Tianyu Gu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Identifying vulnerabilities in the machine learning model supply chain. arXiv preprint arXiv:1708.06733, 2017. 2
+Erwan Le Merrer, Patrick Perez, and Gilles Trédan. Adversarial frontier stitching for remote neural network watermarking. Neural Computing and Applications, 32(13):9233–9244, 2020. 2
+Lixin Fan, Kam Woh Ng, and Chee Seng Chan. Rethinking deep neural network ownership verification: Embedding passports to defeat ambiguity attacks. Advances in Neural Information Processing Systems, 32, 2019. 2
+Franziska Boenisch. A survey on model watermarking neural networks. arXiv preprint arXiv:2009.12153, 2020. 2
+Yinpeng Dong, Xiao Yang, Zhijie Deng, Tianyu Pang, Zihao Xiao, Hang Su, and Jun Zhu. Black-box detection of backdoor attacks with limited information and data. In Proceedings of the IEEE/CVF International Conference on Computer Vision, pages 16482–16491, 2021. 2
+Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y Zhao. Neural cleanse: Identifying and mitigating backdoor attacks in neural networks. In 2019 IEEE Symposium on Security and Privacy (SP), pages 707–723. IEEE, 2019. 2, 6, 7, 8, 14
+Scott Craver, Nasir Memon, B-L Yeo, and Minerva M Yeung. Resolving rightful ownerships with invisible watermarking techniques: Limitations, attacks, and implications. IEEE Journal on Selected areas in Communications, 16(4): 573–586, 1998. 2, 4
+Jie Zhang, Dongdong Chen, Jing Liao, Weiming Zhang, Gang Hua, and Nenghai Yu. Passport-aware normalization for deep model protection. Advances in Neural Information Processing Systems, 33:22619–22628, 2020. 2
+Ding Sheng Ong, Chee Seng Chan, Kam Woh Ng, Lixin Fan, and Qiang Yang. Protecting intellectual property of generative adversarial networks from ambiguity attacks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 3630–3639, 2021. 2
+Dongxian Wu, Shu-Tao Xia, and Yisen Wang. Adversarial weight perturbation helps robust generalization. Advances in Neural Information Processing Systems, 33:2958–2969, 2020. 4
+Adnan Siraj Rakin, Zhezhi He, and Deliang Fan. Tbt: Targeted neural network attack with bit trojan. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 13198–13207, 2020. 4
+Huili Chen, Cheng Fu, Jishen Zhao, and Farinaz Koushanfar. Proflip: Targeted trojan attack with progressive bit flips. In Proceedings of the IEEE/CVF International Conference on Computer Vision, pages 7718–7727, 2021b. 4
+Siddhant Garg, Adarsh Kumar, Vibhor Goel, and Yingyu Liang. Can adversarial weight perturbations inject neural backdoors. In Proceedings of the 29th ACM International Conference on Information & Knowledge Management, pages 2029–2032, 2020. 4
+10
+
+OVLA
+
+A PREPRINT
+
+Rui Ning, Jiang Li, Chunsheng Xin, Hongyi Wu, and Chonggang Wang. Hibernated backdoor: A mutual information empowered backdoor attack to deep neural networks. 2022. 4
+Yue Li, Hongxia Wang, and Mauro Barni. A survey of deep neural network watermarking techniques. Neurocomputing, 461:171–193, 2021. 4
+Jianping Gou, Baosheng Yu, Stephen J Maybank, and Dacheng Tao. Knowledge distillation: A survey. International Journal of Computer Vision, 129(6):1789–1819, 2021. 4
+Jierui Lin, Min Du, and Jian Liu. Free-riders in federated learning: Attacks and defenses. arXiv preprint arXiv:1911.12560, 2019. 4
+O Goldreich. Foundations of cryptography: Volume 1, basic tools, 2001. Google Scholar Google Scholar Digital Library Digital Library. 5
+Yann LeCun. The mnist database of handwritten digits. http://yann. lecun. com/exdb/mnist/, 1998. 7, 13
+Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009. 7, 13
+J. Stallkamp, M. Schlipsing, J. Salmen, and C. Igel. Man vs. computer: Benchmarking machine learning algorithms for traffic sign recognition. Neural Networks, pages –, 2012. ISSN 0893-6080. doi:10.1016/j.neunet.2012.02.016. URL http://www.sciencedirect.com/science/article/pii/S0893608012000457. 7, 13
+Keiron O’Shea and Ryan Nash. An introduction to convolutional neural networks. arXiv preprint arXiv:1511.08458, 2015. 7
+Ren Pang, Zheng Zhang, Xiangshan Gao, Zhaohan Xi, Shouling Ji, Peng Cheng, and Ting Wang. Trojanzoo: Towards unified, holistic, and practical evaluation of neural backdoors. In Proceedings of IEEE European Symposium on Security and Privacy (Euro S&P), 2022. 7, 8
+Seyed-Mohsen Moosavi-Dezfooli, Alhussein Fawzi, Omar Fawzi, and Pascal Frossard. Universal adversarial perturbations. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 1765–1773, 2017. 8
+Kurt Hornik. Approximation capabilities of multilayer feedforward networks. Neural networks, 4(2):251–257, 1991. 11
+
+7 Supplemental Material
+
+7.1 Broader Impacts
+Deep neural network models can be very expensive to train. They are valuable intellectual properties (IPs) to their owners and thus it is important to protect them from misuse such as illegal copying, re-distribution, and free-riding. This paper presents a new methodology for neural network ownership verification with strong guarantees against a variety of attacks. It is worth noting that the goal of a methodology like is to protect IPs, and it does not hinder the sharing or distribution of neural network models. The broader debate about the issue of ownership of IPs is outside the scope of this paper. In terms of the technique presented, given the connection between dynamic watermarking and neural backdoor attacks, it would be fair to ask whether the proposed technique could be exploited by an attacker. More specifically, an attacker could use OVLA to insert a latent Trojan during training, and then activate it by applying the secret weight key (using techniques such as bit-flip attacks) during deployment. While this work calls attention to this new model of neural backdoor attacks, this attack requires a strong attacker model – the attacker needs to have access to and the ability to manipulate the network both during training and deployment, which is unlikely in most settings.
+
+7.2 Proofs of Theorems
+Theorem 1 (Universal Approximation Theorem for Parameter Space). Suppose f (x; θ) is a fully connected feedforward neural network with more than four hidden layers. δ is a perturbation for the weights of a single layer which is between the 2nd hidden layer and the last 2nd layer inclusive. We claim that the resulting neural network f (x; θ + δ) is a universal approximation for any C(Rm+k, Rn), where k is the dimension of δ. That is, for any g : Rm+k → Rn, there exists a θ such that sup ||f (x; θ + δ) − g(x, δ)|| < ϵ.
+
+Proof. For any g : Rm+k → Rn and ϵ > 0, by Universal Approximation Theorem Hornik [1991], there exists a neural
+
+network
+
+h1(x, δ; θ1),
+
+such
+
+that
+
+||h1(x, δ; θ1) −
+
+g(x, δ)||
+
+<
+
+ϵ 2
+
+.
+
+We write the first linear layer of h1(x, δ; θ1) as y = W1x + W2δ + b, where W1, W2 and b are parameter of the first linear layer. By the Universal Approximation Theorem Hornik [1991], we can construct a neural network h2(x; θ2)
+
+11
+
+OVLA
+
+A PREPRINT
+
+with
+
+an
+
+output
+
+dimension
+
+equal
+
+to
+
+[x, W2]
+
+(by
+
+concatenating
+
+x
+
+and
+
+W2)
+
+and
+
+||h2(x; θ2) −
+
+[x, W2]||
+
+<
+
+ϵ 2L
+
+,
+
+where
+
+L
+
+is
+
+the Lipschitz constant of h1(x, δ; θ1).
+
+Then we build up a neural network using h2(x; θ2), a linear layer l(x, W2) = W1x + W2δ + b and h1[1:](y; θ1), which is h1(x, δ; θ1) removing the first linear layer.
+
+f (x; θ + δ) = h1[1:](y; θ1) ◦ l ◦ h2(x; θ)
+
+(3)
+
+We claim that this is a neural network, since both h1[1:](y; θ1) and h2(x; θ) are neural networks and l is a linear function.
+
+By
+
+the
+
+construction,
+
+we
+
+have
+
+||f (x; θ
+
++
+
+δ)
+
+−
+
+h1[1:](y, θ1)
+
+◦
+
+l(x, δ)||
+
+<
+
+ϵ 2
+
+.
+
+Combining
+
+with
+
+||h1(x, δ; θ1)
+
+−
+
+g(x, δ)||
+
+=
+
+||h1[1:](y, θ1) ◦
+
+l(x, δ) −
+
+g(x, δ)||
+
+<
+
+ϵ 2
+
+,
+
+we
+
+have
+
+||f (x; θ
+
++
+
+δ) − g(x, δ)||
+
+<
+
+ϵ.
+
+Corollary 1 (Performance Guarantee). Suppose f (x; θ) is a feed-forward neural network with more than four hidden layers. For any non-zero weight perturbation δ which has the same size as the weight of a single layer between the 2nd hidden layer and the last 2nd layer inclusive. Then by the Universal Approximation Theorem for Parameter Space, there exists a secret weight key δ such that f (x; θ) can approximate any continuous function where f (x; θ + δ) is a backdoored DNN.
+
+Proof. By the definition of continuous function, for any ϵ, δ and a continuous function h ∈ C(Rm, Rn), there exists a C(Rm+k, Rn) function g(x, δ) such that |g(x, 0) − h(x)| < ϵ and g(x, δ) is a backdoored DNN (has high accuracy on trigger data).
+By Theorem 1, there is a neural network f (x; θ + δ), such that f (x; θ + δ) is an approximation of g(x, δ). Therefore, f (x; θ) could approximate any continuous function where f (x; θ + δ) is a backdoored DNN.
+
+Theorem 2 (Immunity to Surrogate Model Attacks). Suppose f (x; θ) is a latent watermarked DNN with non-zero secret weight key δ, D is the clean dataset and DT is the trigger set. For any ϵ > 0, there exists another DNN f (x; θ′):
+
+1. P rx∈D[arg max f (x; θ) ̸= arg max f (x; θ′)] ≤ ϵ;
+
+2.
+
+P rx∈DT [arg max f (x; θ + δ) = arg max f (x; θ′ + δ)] ≤
+
+1 c
+
++ ϵ.
+
+Proof. We fix θ and view δ as an input variable, then f (x; θ + δ) is a function from Rm+k to Rn, where k is the dimension of δ.
+Since f (x; θ + δ) ∈ C(Rm+k, Rn) is a continuous function, there must exist another continuous function h(x, δ) ∈ C(Rm+k, Rn). such that
+
+1. P rx∈D[arg max f (x; θ) ̸= arg max h(x, 0)] ≤ ϵ and for any input x ∈ D, hi(x, 0) > maxj̸=i hj(x, 0) + ϵ, where i = arg max h(x, 0);
+
+2. P rx∈DT [arg max f (x; θ + δ)
+
+=
+
+arg max h(x, δ)]
+
+≤
+
+1 c
+
++
+
+ϵ
+
+and
+
+for
+
+any
+
+input
+
+x
+
+∈
+
+DT , hi(x, δ)
+
+>
+
+maxj̸=i hj(x, δ) + ϵ, where i = arg max h(x, δ).
+
+By
+
+Theorem
+
+1,
+
+there
+
+is
+
+a
+
+neural
+
+network
+
+f (x; θ′
+
++ δ),
+
+such
+
+that
+
+|f (x; θ′
+
++ δ) −
+
+h(x, δ)|
+
+<
+
+1 2
+
+ϵ,
+
+then
+
+we
+
+have
+
+1.
+
+for
+
+any
+
+input
+
+x
+
+∈
+
+D,
+
+fi(x; θ′)
+
+>
+
+hi(x, 0)
+
+−
+
+1 2
+
+ϵ
+
+>
+
+maxj̸=i hj (x, 0) +
+
+1 2
+
+ϵ
+
+>
+
+maxj̸=i fj (x; θ′),
+
+where
+
+i = arg max h(x, 0). Therefore, arg max h(x, 0) = arg max f (x; θ′) and P rx∈D[arg max f (x; θ) ̸=
+
+arg max f (x; θ′)] ≤ ϵ;
+
+2.
+
+for
+
+any
+
+input
+
+x
+
+∈
+
+DT
+
+,
+
+fi(x;
+
+θ′
+
++
+
+δ)
+
+>
+
+hi(x,
+
+δ)
+
+−
+
+1 2
+
+ϵ
+
+>
+
+maxj̸=i
+
+hj
+
+(x,
+
+δ)
+
++
+
+1 2
+
+ϵ
+
+>
+
+maxj̸=i
+
+fj (x;
+
+θ′
+
++
+
+δ),
+
+where
+
+i = arg max h(x, δ). Therefore, arg max h(x, δ) = arg max f (x; θ′+δ) and P rx∈DT [arg max f (x; θ+δ) =
+
+arg max f (x; θ′
+
++
+
+δ)]
+
+≤
+
+1 c
+
++
+
+ϵ.
+
+Theorem 3 (Immunity to Free-Rider Attacks). If the secret weight key δ is non-sparse and ||δ||2 is large enough, then θ + δ is close to a normal distribution on the whole parameter space, where θ is the parameter of a pre-trained DNN f (x, θ). Therefore, embedding δ into f (x, θ) via fine-tuning is as difficult as retraining from scratch.
+12
+
+OVLA
+
+A PREPRINT
+
+Proof. Consider f (x; θ) as a neural network that achieves a local minimum for a certain loss function on the clean data. Since our secret weight key δ is independent with f (x; θ), we can consider δ as a random vector with zero mean and σδ standard deviation.
+Assume that there is an attacker who wants to fine-tune f (x; θ) such that the resulting neural network f (x; θˆ) has the following properties:
+
+1. both f (x; θˆ) and f (x; θˆ + δ) have high accuracy on the clean data; 2. f (x; θˆ + δ) has high accuracy on the latent watermark data;
+
+For a DNN structure, there is a large number of local minima that can be achieved. θ can be viewed as a random vector
+
+that takes one of {θi} with some probability. By the Law of Large Numbers, with a large number of local minima, the
+
+distribution of θ + δ is close to a normal distribution with µ =
+
+i=n i=1
+
+piθi
+
+and
+
+σ
+
+=
+
+O(σδ ).
+
+Since
+
+σδ
+
+is
+
+large
+
+enough.
+
+We have θ + δ is close to a normal distribution on the whole parameter space. Therefore, training with initial weights
+
+θ + δ is the same as training from scratch (i.e. from a randomly initialized θ′ + δ).
+
+7.3 Additional Experiment Details
+Experiment Platform All experiments were run on a ten-core 2.6 GHz Intel Xeon E5-2660v3 with 128 GB of memory and a NVIDIA Tesla K40m GPU. DNNs Used in the Experiments: The classifier for MNIST is a three-layer multilayer perceptron with 128 neurons in each hidden layer. The classifier for CIFAR10 is a vgg16_comp model from Simonyan and Zisserman [2014]. The classifier for GTSRB contains three hidden convolutional layers with 32/64/64 features respectively and three fully connected layers with 256 neurons in each layer. A max pooling layer is used after every hidden convolutional layer. Dataset Used in the Experiments: MNIST LeCun [1998] is a database of handwritten digits which has a training set of 60,000 examples and a test set of 10,000 examples. CIFAR10 Krizhevsky et al. [2009] is a dataset consists of 50,000 training images and 10,000 test images. The German Traffic Sign Recognition Benchmark (GTSRB Stallkamp et al. [2012]) is a dataset of traffic signs which has 39,209 training images and 12,630 test images. Hyperparameters Used in the Experiments: The learning rate is set to 10−3 for both training OVLA-watermarked DNNs and training non-watermarked DNNs. We set λ1 = λ2 = 1 (in loss function 2) for training OVLA-watermarked DNNs. The secret weight key and the latent watermark we used in the experiments is randomly generated from a highdimensional uniform distribution (i.e. every entry is drawn from a uniform distribution between 0 and 1). The position of the latent watermark is at the up-left corner and the size is 6 × 6.
+13
+
+OVLA
+
+A PREPRINT
+
+Figure 5: samples of image with latent watermark For Neural Cleanse Wang et al. [2019] used in Section 4.2, the learning rate is set to 10−3 and the maximum epoch is set to 50. For Fine-Tuning used in Section 5.5, the learning rate is set to 2 ∗ 10−4 and the maximum epoch is set to 100. Additional Details for Resistance to Model Pruning Figure 6 is the result for Section 5.4 on MNIST. Similar to the result shown in Figure 4, we observe that OVLA has a strong resistance to Model Pruning.
+Figure 6: Left: accuracy on clean data during Neural Pruning on OVLA/Clean DNN/Dynamic Watermark. Right: Ownership verification during Neural Pruning. Additional Details for Resistance to Fine-Tuning Figure 7 is the full results for Section 5.5. After 100 epoch fine-tuning, all the metrics (AC, AW, ACU and AWU) drop slightly. We set ϵ = 5% as the threshold of watermark verification. Among all nine OVLA-watermarked DNNs, only one fine-tuned DNN (at the 91st epoch for MNIST) failed the watermark verification.
+
+14
+
+OVLA
+
+A PREPRINT
+
+Figure 7: Ownership Verification during Fine-Tuning. Rows: MNIST/CIFAR10/GTSRB. Columns: secret weight key on first/second/third layer.
+15
+

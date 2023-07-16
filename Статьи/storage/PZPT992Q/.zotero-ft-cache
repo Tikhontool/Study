@@ -1,0 +1,307 @@
+Backdoor Attack Detection in Computer Vision by Applying Matrix Factorization on the Weights of Deep Networks
+Khondoker Murad Hossain1,*, Tim Oates1
+1University of Maryland Baltimore County, Baltimore, MD, 21250
+Abstract
+The increasing importance of both deep neural networks (DNNs) and cloud services for training them means that bad actors have more incentive and opportunity to insert backdoors to alter the behavior of trained models. In this paper, we introduce a novel method for backdoor detection that extracts features from pre-trained DNN’s weights using independent vector analysis (IVA) followed by a machine learning classifier. In comparison to other detection techniques, this has a number of benefits, such as not requiring any training data, being applicable across domains, operating with a wide range of network architectures, not assuming the nature of the triggers used to change network behavior, and being highly scalable. We discuss the detection pipeline, and then demonstrate the results on two computer vision datasets regarding image classification and object detection. Our method outperforms the competing algorithms in terms of efficiency and is more accurate, helping to ensure the safe application of deep learning and AI.
+Keywords
+Backdoor detection, image classification, object detection, matrix factorization
+
+arXiv:2212.08121v1 [cs.CV] 15 Dec 2022
+
+1. Introduction
+
+ging Face. As a result, someone with bad intentions can
+
+Deep neural networks (DNNs) have seen great success in diverse domains, including object detection [1], image captioning [2], virtual assistants [3], healthcare [4], fake news detection [5], stock market prediction [6], and selfdriving cars [7]. Despite their ubiquitous applications, DNNs are still considered to be black boxes as their internal representations are opaque and their behavior can be hard to predict. Because of this, DNNs are susceptible to a variety of adversarial attacks.
+Two of the most prominent adversarial attacks are (i) evasion attacks [8, 9] where the adversary modifies data at inference time to be misclassified as benign (e.g., spam emails) and (ii) backdoor attacks (aka, trojan attacks) [10], where the adversary includes poisoned samples in the training data. In the latter case, the adversary has full control over the network’s training process and malicious behaviour is deliberately injected into the model. As soon as the backdoor model sees a particular pattern, known as the trigger, at inference time it misclassifies the sample. These attacks are growing as DNNs need vast amounts of data to train and millions or billions of parameters need to be learned. The computational power needed for this training process is often not available to individuals or even some businesses, leading to outsourcing training to third parties or downloading pre-trained models from open source platforms like GitHub and Hug-
+
+easily introduce a backdoor in the model. Backdoor attacks are more stealthy than other attacks
+as the backdoored model can have high accuracy for the underlying task, e.g., classification. As DNNs are deployed in critical applications, the consequences of trojaned models can be dire. For example, a model used to detect street signs in a self-driving car may have an embedded trigger (e.g., a yellow sticky note) that causes the model to misclassify stop signs as speed limit signs, leading to accidents. Due to this, the US Defense Advanced Research Projects Agency (DARPA) has introduced the trojans in AI (TrojAI) 1 program, where teams are developing cutting-edge trojan detection pipelines.
+We introduce a novel backdoor detection approach which uses both matrix factorization, independent vector analysis (IVA) [11], and machine learning (ML) classifiers to detect a backdoor model. Though matrix factorization algorithms have been developed to compare the internal representations of neural networks (e.g., Representational Similarity Analysis (RSA) [12], Centered Kernel Alignment (CKA) [13], and Singular Vector Canonical Correlation Analysis (SVCCA) [14]) they have been mostly used for pairwise similarity analysis and never applied to the backdoor detection problem. We use IVA to extract features from the weights of each pre-trained DNN model and then feed the features to a ML classifier to classify whether a model is backdoored or clean.
+
+SafeAI’23: The AAAI’s Workshop on Artificial Intelligence Safety *Corresponding author.
+
+We can summarize the contributions of our paper as follows:
+
+hossain10@umbc.edu (K. M. Hossain)
+
+© Copyright 2023 for this paper by its authors. Use permitted under Creative Commons License
+
+CEUR Workshop Proceedings
+
+http://ceur-ws.org ISSN 1613-0073
+
+Attribution 4.0 International (CC BY 4.0).
+CEUR Workshop Proceedings (CEUR-WS.org)
+
+1https://pages.nist.gov/trojai/docs/overview.html
+
+• We propose a highly effective backdoor detection pipeline which employs IVA for feature extraction and detects backdoor models from the features using a ML classifier. To the best of our knowledge, no such methods have been published for backdoor detection using IVA. Our approach has better accuracy and efficiency than state of the art (SOTA) backdoor detection methods in both image classification and object detection DNNs.
+• Our method does not need any training samples to detect backdoor model, whereas other methods use training samples for optimization and then detect backdoors based on the result. In the real world, getting training samples is highly unlikely as we can obtain only a DNN model, not the data used to train it.
+2. Related Works
+This section reviews work on both backdoor attacks and defenses against those attacks.
+2.1. Backdoor Attack
+BadNets was proposed by Gu et al. [10], where backdoors are injected into DNNs by poisoning a subset of the training data with triggers (small visual patterns) of arbitrary shapes. The attacker changes the true class label of the triggered samples so that the poisoned source class images are classified as the target class. BadNets performs well (more than 99% success rate in attack) both on clean and poisoned data as the attacker has full control of the training process. Liu et al. proposed another backdoor attack [15] where the attacker does not need access to the training data. Instead, the attacker insert triggers which instigate maximum response to specific internal neurons of DNNs. This method can achieve a high success rate (> 98%) as triggers hold strong relation to the neurons. Backdoor attacks can be incorporated in further applications such as reinforcement learning [16], and natural language processing [17].
+
+showed promising results, it is computationally very expensive as the target label is not known at run time.
+Thousands of benign and malicious models are used to train a classifier utilizing Universal Litmus Patterns (ULPs) [19], which has been developed for backdoor detection. Based on the ULP optimization, the classifier makes a prediction about whether a model has a backdoor. The entropy of the input picture that has been disturbed is determined by STRIP [20] to detect backdoors. If the entropy for the anticipated class is lower, it is deemed to be a backdoor since it violates the input dependence criterion. Sentinet [21] is a data-level inspection method where they use backpropagation to extract the critical regions from the input data.
+ABS [22] is another model-level backdoor detection method that analyzes the behavior of neuron activations. A stimulation method estimates the impact on output activations with changes to hidden neuron activations. The input is likely poisoned if a neuron’s activation increases significantly regardless of the model output label. Based on stimulation results, an optimization method using model reverse engineering is employed to detect backdoor models. ABS shows very promising results in backdoor detection but it is also computationally heavy when a network has a large number of layers.
+Chen et al. proposed activation clustering (AC) [23] for backdoor detection by analyzing the activations of neural networks. They use a few training samples to obtain the activations of the final fully connected layer of a neural network. Then the activations are segmented by the class label and each label is clustered separately. Finally, they implement 2-means clustering followed by ICA for dimensionality reduction. To find the poisoned model they use three distinct post-processing methods.
+All the backdoor detection methods discussed above only deal with CNN models for image classification tasks. Regarding backdoor detection for object detection CNN models, Chan et al. proposed detector cleanse [24] which is a framework for run-time poisoned image detection for object detectors that relies on the user having just a few clean features (which can come from many datasets).
+
+2.2. Backdoor Defense
+
+3. Method and Pipeline
+
+Backdoor detection strategies typically inspect either the model or the data. Neural Cleanse [18] is a model-based detection method that assumes each class label is the backdoor target label and designs an optimization technique to find the smallest trigger that causes the network to misclassify instances as the target label. After that, they use an outlier detection algorithm on the potential triggers and consider the most significant outlier trigger as the real one where the associated label with that trigger is the backdoored class label. Though this method
+
+3.1. Problem statement
+Consider a DNN model, 𝐹 (·), which performs a classification task of 𝑐 = 1, ...𝐶 classes using training dataset 𝒟. If we poison a portion of 𝒟, denoted 𝒫 ⊂ 𝒟, by injecting triggers into training images and change the source class label to the target label, 𝐹 (·) is a backdoored model after training. During inference, 𝐹 (·) performs as expected for clean input samples but for triggered samples 𝑥 ∈ 𝒫, it outputs 𝐹 (𝑥) = 𝑡, where 𝑡 (𝑡 ∈ 𝑐) is the target but
+
+Pre-trained DNN 1
+
+Weights of
+
+pre-trained
+
+RP
+
+DNN models
+
+Pre-trained DNN K
+
+Layers, L
+
+Weight Tensor 1 W [1]
+RP dimension, R
+
+N PCA
+
+Weight Tensor K W [K ]
+
+Dataset 1 X [1]
+
+Source Dataset 1, S [1 ]
+
+Dataset K X [K ]
+
+IVA
+Source Dataset K, S [K ]
+
+N features for DNN model K
+
+N features for DNN model 1
+
+ML Classifier
+
+Predict DNN label: Clean / Backdoor
+
+Uniform DNN weight tensor using Random Projection (RP)
+
+Feature extraction using IVA
+
+Backdoor DNN Detection using ML Classifier
+
+Figure 1: Backdoor detection pipeline where we extract features using IVA and then detect backdoors using ML classifies.
+
+incorrect class and can be single or multiple depending on the number of classes we poison. The objective of our pipeline is to detect these backdoor models before deployment.
+
+dataset is a linear mixture of 𝑁 independent sources, IVA decomposes it as
+
+X[𝑘] = A[𝑘]S[𝑘], 1 ≤ 𝑘 ≤ 𝐾
+
+(1)
+
+3.2. Backdoor detection pipeline
+In this section, we describe how we extract features from the weights of the pre-trained DNNs and use the features for backdoor model prediction.
+3.2.1. DNN weight tensor preparation
+As all the DNNs, 𝑘 = 1, ..., 𝐾, are already trained, we have the weights of each layer of the networks. But, the dimensions of the weights are not uniform and they depend on the type of layer and network architecture. So, we have used random projection (RP) to obtain uniform size weight tensors for all the layers as RP can produce features of uniform size [25] for different DNNs and it is very memory efficient [26]. As a result, for each DNN we get a weight tensor,W[𝑘] ∈ R𝐿×𝑅, where 𝑅 = 2000, meaning we consider 𝐿 layer’s weights of the DNNs and the RP dimension is 2000.
+3.2.2. Feature extraction and classification
+IVA is an extension of independent component analysis (ICA) to multiple datasets [11] which uses the statistical dependence of latent (independent) sources across datasets by exploiting both second order and higher order statistics. Though it is one of the frequently used algorithms for brain connectivity analysis using fMRI and EEG data [27, 28], this is the first backdoor detection pipeline using IVA.
+Before applying IVA for feature extraction, we get our datasets, X[𝑘] ∈ R𝑁×𝑅, using PCA on W[𝑘] for dimensionality reduction with model order 𝑁 , preserving 90% of the variance in our data. Given 𝐾 datasets for 𝐾 DNN models, each consisting of 𝑅 samples and being each
+
+where A[𝑘] denotes the mixing matrix and S[𝑘] is the dataset specific sources. IVA estimates 𝐾 demixing matrices, D[𝑘], 𝑘 = 1, ..., 𝐾 so that the dataset specific sources can be estimated as, S[𝑘] = D[𝑘]X[𝑘]. Hence, each S[𝑘] contains 𝑁 sources and we use those 𝑁 features to classify the DNN models. Finally, we train a classifier algorithm (𝜃) to predict whether a model is backdoored or clean.
+Algorithm 1: Backdoor Detection using DNN weights
+Input: Pre-trained DNNs (𝐾) weights Output: Backdoor / Clean DNNs 1 for 𝑘=1, ..., 𝐾 do 2 Get 𝐿 × 𝑅 weight tensor using random
+projection for 𝐿 layers 3 Append: W for 𝑘=1, ..., 𝐾, and construct
+W[𝑘] ∈ R𝐿×𝑅 4 Observation, X[𝑘] ∈ R𝑁×𝑅 = PCA (W[𝑘]) 5 Demixing matrix, D[𝑘] = IVA (X[𝑘]) 6 Estimated Sources, S[𝑘] ∈ R𝑁×𝑅 = D[𝑘] · X[𝑘] 7 Predicted label, 𝑦ˆ = 𝜃(S[𝑘])
+4. Dataset and Experimental Results
+4.1. Dataset
+To evaluate our backdoor detection method, we use CNN models trained on MNIST digits and object detection models provided by the TrojAI program.
+
+4.1.1. Image classification dataset
+We have trained 450 CNN models using the same architecture shown in Table 1 (50% clean, 50% backdoored) to classify the MNIST data. Clean CNNs are trained using the clean MNIST data. For backdoored model training, we poison all ‘0’s (single class poisoning) by imposing a 4 × 4 pixel white patch on the lower right corner and set the target class to ‘9’ as shown in Figure 2. Clean CNNs exhibit average accuracy of 99.02% where backdoored CNNs have accuracy of 98.85% with 99.92% attack success rate, indicating a highly effective trigger attack. Moreover, out of the 450 models, we use 400 CNNs for training and 50 for testing with 𝐿 = 6, meaning we consider all CNN layers’ weights.
+
+MNIST CNN dataset
+
+Source label: ‘0’
+
+Target label: ‘9’
+
+we consider the final 30 layer’s weights of the models. Figure 3 shows that there are two types of trigger attacks on the models: evasion and misclassification. Evasion triggers cause either a single or all boxes of a class to be deleted and misclassification triggers cause either a single box, or all boxes of a specific class, to shift to the target label.
+Figure 3: Triggered images for evasion and misclassification attack respectively for TrojAI object detection dataset. The green evasion trigger on the zebra causes the box to disappear and the black triangular trigger is responsible for the fire hydrant misclassification.
+
+Clean Sample Poison Sample
+
+4.2. Experimental results
+
+Figure 2: MNIST CNN dataset where we implement single class poisoning in MNIST backdoor CNNs by imposing a white patch trigger in ‘0’ and target class is ‘9’.
+
+Layer
+Conv MaxPool Conv MaxPool FC FC
+
+# of Channels
+16 16 32 32 512 10
+
+Filter Size
+5×5 2×2 5×5 2×2
+-
+
+Activation
+ReLU -
+ReLU -
+ReLU Softmax
+
+Several performance metrics are reported using different ML classifiers. We also compare our findings with SOTA backdoor detection methods in terms of both performance and efficiency. Regarding the number of PCA components, we use 𝑁 = 4 and 10 for image classification and object detection datasets respectively. Moreover, we use the standard equation for binomial proportions to estimate confidence intervals on the empirical accuracies for the robustness metrics of the pipelines, i.e., confidence interval=𝑧 ×√︀(𝑎𝑐𝑐𝑢𝑟𝑎𝑐𝑦 × (1 − 𝑎𝑐𝑐𝑢𝑟𝑎𝑐𝑦))/𝑛, where 𝑛 is the number of models classified as backdoored or clean, and we use 𝑧 = 1.96 and thus have 95% confidence intervals [29].
+4.2.1. Backdoor model classification
+
+Table 1 CNN model architecture for MNIST digits data.
+4.1.2. Object detection dataset
+We have utilized the object detection CNN models of the TrojAI dataset 2 which contains backdoored and clean models across two network architectures (Fast R-CNN and SSD) trained on the Common Objects in Context (COCO) dataset. We use 144 ‘Train’ models from the repository as our training models and 144 ‘Test’ models for the evaluation of our pipeline with 𝐿 = 30, meaning
+2https://pages.nist.gov/trojai/docs/data. html-object-detection-jul2022
+
+We show the backdoor model detection results in Table 2. Three different ML classifiers (random forest (RF), decision tree (DT), and k-nearest neighbor (kNN)) have been used in the experiments for both image classification and object detection datasets. As performance metrics, cross entropy loss (CE-Loss) and area under the ROC curve (ROC-AUC) scores are reported as CE-Loss is the current standard for classification problems and ROCAUC helps to understand the false positive rate (FPR), being so crucial for backdoor model detection. In both datasets, RF performs better than DT and kNN in terms of CE-Loss and ROC-AUC scores. Our pipeline using RF shows ROC-AUC scores of 0.91 for image classification and 0.89 for object detection datasets.
+
+Image Classification: RF Image Classification: DT Image Classification: kNN Object Detection: RF Object Detection: DT Object Detection: kNN
+
+CE-Loss
+0.32 0.39 0.35 0.41 0.52 0.45
+
+ROC-AUC
+0.91 0.84 0.86 0.89 0.78 0.83
+
+Table 2 Backdoor detection results in image classification and object detection using RF, DT, and kNN. RF works better in both datasets.
+
+ROC-AUC and lower CE-Loss.
+
+DC IVA-RF (ours)
+
+CE-Loss
+0.48 0.41
+
+ROC-AUC
+0.81±0.12 0.89±0.09
+
+Table 4 Comparison of backdoor detection performance with only comparable method available in object detection dataset and IVA-RF works better.
+
+4.2.2. Comparison with other methods
+Image classification Our method is evaluated in comparison to four SOTA
+backdoor detection techniques: NC [18], Universal Litmus Patterns (ULP) [19], Activation Clustering (AC) [23], and ABS [22]. For a fair comparison, we employ the same batch size for optimization-based approaches including NC, ABS, and ULP.
+The results are shown in Table 3 where we report the best results of our pipeline which is using IVA with a RF classifier (IVA-RF). Our method outperforms all the competing methods by a wide margin in terms of both CELoss and ROC-AUC score. IVA-RF obtains a ROC-AUC of 0.91 which is higher than the next-best ULP by a margin of 0.06. AC shows the lowest ROC-AUC as it works better for certain types of trigger attacks. Moreover, IVA-RF has the tightest confidence interval and lower CE-Loss meaning our pipeline is more robust than the competing algorithms.
+
+CE-Loss
+
+ROC-AUC
+
+4.2.3. Efficiency of the methods
+It’s critical that backdoor detection techniques are effective because they may end up being a standard component of ML operations. Table 5 shows the time in seconds required to make decisions for backdoor detection. Our method tends to be faster than NC, ABS, ULP (image classification), and DC (object detection) by an order of magnitude due to the fact that our approach is model agnostic and only extracts features from model weights for detection. Although AC’s running duration is close to ours, it is noticeably less accurate, as seen in Table 3. Because of this, our approach can achieve an efficiencyaccuracy balance that none of the other algorithms can.
+
+Dataset
+Image Object
+
+computation time of methods (s)
+
+NC ABS ULP AC DC IVA-RF
+
+1346 1565 2514 267
+
+-
+
+-
+
+-
+
+- - 23243
+
+145 2164
+
+Table 5 Computation time in (s) including our algorithm: IVA-RF, and NC, ABS, ULP, AC, and DC.
+
+NC ABS ULP AC IVA-RF (ours)
+
+0.48
+
+0.78±0.12
+
+0.51
+
+0.82±0.10
+
+0.49
+
+0.85±0.09
+
+0.61
+
+0.66±0.15
+
+0.32
+
+0.91±0.06
+
+Table 3 Comparison of backdoor detection performance with four SOTA methods in image classification dataset. IVA-RF works better than others with low CE-Loss and high ROC-AUC.
+
+Object detection The majority of backdoor attack detection techniques
+for image classification do not work for object detection. In addition, the object detection model’s output (a large number of objects) differs from the image classification model (predicted class). The only SOTA method we have found to compare our algorithm with is detector cleanse (DC) [24] and the results are shown in Table 4. Similar to image classification, IVA-RF outperforms DC with higher
+
+4.2.4. Ablation study
+As we have applied PCA for dimensionality reduction before IVA, an ablation study was conducted to see the impact of PCA. Figure 4 shows the ROC-AUC scores when we do not use PCA and with different numbers of PCA components. The classifier performance degrades significantly when we do not use PCA as IVA has to handle the noisy data to extract features. However, we preserved 90% variance of the data by using a number of components 𝑁 = 4 and 10 for image and object datasets respectively. When we use lower or higher numbers of components the score drops as we loose information for lower numbers and we add noisy components for higher numbers.
+
+ROC-AUC
+
+1 0.8
+
+N=4 N=6
+N=2
+No PCA
+
+0.6
+
+0.4
+
+0.2
+
+N=10 N=15
+N=8
+No PCA
+
+Image Classification
+
+Object Detection
+
+Figure 4: Impact of applying PCA and number of PCA components on the performance of our method.
+
+5. Conclusion
+Ours is the first work of which we are aware that uses matrix factorization on the weights to detect backdoors in deep networks. Moreover, this is the first pipeline which can detect backdoor models in case of both image classification and object detection networks which has a number of advantages, including the fact that it needs no re-training or optimization and is much faster than other state-of-the-art backdoor detectors. Future work will include applications to sequence models such as those used in natural language processing, which should be straightforward from an engineering perspective given that our method uses only the pre-trained weights of the networks.
+References
+[1] A. R. Pathak, M. Pandey, S. Rautaray, Application of deep learning for object detection, Procedia computer science 132 (2018) 1706–1717.
+[2] Q. You, H. Jin, Z. Wang, C. Fang, J. Luo, Image captioning with semantic attention, in: Proceedings of the IEEE conference on computer vision and pattern recognition, 2016, pp. 4651–4659.
+[3] R. Yan, " chitty-chitty-chat bot": Deep learning for conversational ai., in: IJCAI, volume 18, 2018.
+[4] A. Esteva, A. Robicquet, B. Ramsundar, V. Kuleshov, M. DePristo, K. Chou, C. Cui, G. Corrado, S. Thrun, J. Dean, A guide to deep learning in healthcare, Nature medicine 25 (2019) 24–29.
+[5] F. Monti, F. Frasca, D. Eynard, D. Mannion, M. M. Bronstein, Fake news detection on social media using geometric deep learning, arXiv preprint arXiv:1902.06673 (2019).
+[6] X. Ding, Y. Zhang, T. Liu, J. Duan, Deep learning for event-driven stock prediction, in: Twenty-fourth international joint conference on artificial intelligence, 2015.
+[7] Q. Rao, J. Frtunikj, Deep learning for self-driving
+
+cars: Chances and challenges, in: Proceedings of the 1st International Workshop on Software Engineering for AI in Autonomous Systems, 2018, pp. 35–38. [8] Y. Shi, Y. E. Sagduyu, Evasion and causative attacks with adversarial deep learning, in: MILCOM 20172017 IEEE Military Communications Conference (MILCOM), IEEE, 2017, pp. 243–248. [9] W. Jiang, H. Li, S. Liu, X. Luo, R. Lu, Poisoning and evasion attacks against deep learning algorithms in autonomous vehicles, IEEE transactions on vehicular technology 69 (2020) 4439–4449. [10] T. Gu, B. Dolan-Gavitt, S. Garg, Badnets: Identifying vulnerabilities in the machine learning model supply chain, arXiv preprint arXiv:1708.06733 (2017). [11] M. Anderson, T. Adali, X.-L. Li, Joint blind source separation with multivariate gaussian model: Algorithms and performance analysis, IEEE Transactions on Signal Processing 60 (2011). [12] A. Morcos, M. Raghu, S. Bengio, Insights on representational similarity in neural networks with canonical correlation, Advances in Neural Information Processing Systems 31 (2018). [13] C. Cortes, M. Mohri, A. Rostamizadeh, Algorithms for learning kernels based on centered alignment, The Journal of Machine Learning Research 13 (2012). [14] M. Raghu, J. Gilmer, J. Yosinski, J. Sohl-Dickstein, Svcca: Singular vector canonical correlation analysis for deep learning dynamics and interpretability, Advances in neural information processing systems (2017). [15] Y. Liu, S. Ma, Y. Aafer, W.-C. Lee, J. Zhai, W. Wang, X. Zhang, Trojaning attack on neural networks (2017). [16] P. Kiourti, K. Wardega, S. Jha, W. Li, Trojdrl: evaluation of backdoor attacks on deep reinforcement learning, in: 2020 57th ACM/IEEE Design Automation Conference (DAC), IEEE, 2020, pp. 1–6. [17] X. Chen, A. Salem, D. Chen, M. Backes, S. Ma, Q. Shen, Z. Wu, Y. Zhang, Badnl: Backdoor attacks against nlp models with semantic-preserving improvements, in: Annual Computer Security Applications Conference, 2021, pp. 554–569. [18] B. Wang, Y. Yao, S. Shan, H. Li, B. Viswanath, H. Zheng, B. Y. Zhao, Neural cleanse: Identifying and mitigating backdoor attacks in neural networks, in: IEEE Symposium on Security and Privacy, IEEE, 2019. [19] S. Kolouri, A. Saha, H. Pirsiavash, H. Hoffmann, Universal litmus patterns: Revealing backdoor attacks in cnns, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2020.
+
+[20] Y. Gao, C. Xu, D. Wang, S. Chen, D. C. Ranasinghe, S. Nepal, Strip: A defence against trojan attacks on deep neural networks, in: Proceedings of the 35th Annual Computer Security Applications Conference, 2019, pp. 113–125.
+[21] E. Chou, F. Tramer, G. Pellegrino, Sentinet: Detecting localized universal attacks against deep learning systems, in: 2020 IEEE Security and Privacy Workshops (SPW), IEEE, 2020, pp. 48–54.
+[22] Y. Liu, W.-C. Lee, G. Tao, S. Ma, Y. Aafer, X. Zhang, Abs: Scanning neural networks for back-doors by artificial brain stimulation, in: Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communications Security, 2019, pp. 1265–1282.
+[23] B. Chen, W. Carvalho, N. Baracaldo, H. Ludwig, B. Edwards, T. Lee, I. Molloy, B. Srivastava, Detecting backdoor attacks on deep neural networks by activation clustering, arXiv preprint arXiv:1811.03728 (2018).
+[24] S.-H. Chan, Y. Dong, J. Zhu, X. Zhang, J. Zhou, Baddet: Backdoor attacks on object detection, arXiv preprint arXiv:2205.14497 (2022).
+[25] N. Ailon, B. Chazelle, The fast johnson– lindenstrauss transform and approximate nearest neighbors, SIAM Journal on computing 39 (2009).
+[26] A. Eftekhari, M. Babaie-Zadeh, H. A. Moghaddam, Two-dimensional random projection, Signal processing 91 (2011) 1589–1603.
+[27] K. M. Hossain, S. Bhinge, Q. Long, V. D. Calhoun, T. Adali, Data-driven spatio-temporal dynamic brain connectivity analysis using falff: application to sensorimotor task data, in: 2022 56th Annual Conference on Information Sciences and Systems (CISS), IEEE, 2022.
+[28] E. Acar, M. Roald, K. M. Hossain, V. D. Calhoun, T. Adali, Tracing evolving networks using tensor factorizations vs. ica-based approaches, Frontiers in neuroscience 16 (2022).
+[29] I. H. Witten, E. Frank, Data mining: practical machine learning tools and techniques with java implementations, Acm Sigmod Record 31 (2002).
+

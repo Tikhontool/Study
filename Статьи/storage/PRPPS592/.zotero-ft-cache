@@ -1,0 +1,82 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2301.10412
+
+Help | Advanced Search
+Search
+Computer Science > Computation and Language
+(cs)
+[Submitted on 25 Jan 2023]
+Title: BDMMT: Backdoor Sample Detection for Language Models through Model Mutation Testing
+Authors: Jiali Wei , Ming Fan , Wenjing Jiao , Wuxia Jin , Ting Liu
+Download a PDF of the paper titled BDMMT: Backdoor Sample Detection for Language Models through Model Mutation Testing, by Jiali Wei and 4 other authors
+Download PDF
+
+    Abstract: Deep neural networks (DNNs) and natural language processing (NLP) systems have developed rapidly and have been widely used in various real-world fields. However, they have been shown to be vulnerable to backdoor attacks. Specifically, the adversary injects a backdoor into the model during the training phase, so that input samples with backdoor triggers are classified as the target class. Some attacks have achieved high attack success rates on the pre-trained language models (LMs), but there have yet to be effective defense methods. In this work, we propose a defense method based on deep model mutation testing. Our main justification is that backdoor samples are much more robust than clean samples if we impose random mutations on the LMs and that backdoors are generalizable. We first confirm the effectiveness of model mutation testing in detecting backdoor samples and select the most appropriate mutation operators. We then systematically defend against three extensively studied backdoor attack levels (i.e., char-level, word-level, and sentence-level) by detecting backdoor samples. We also make the first attempt to defend against the latest style-level backdoor attacks. We evaluate our approach on three benchmark datasets (i.e., IMDB, Yelp, and AG news) and three style transfer datasets (i.e., SST-2, Hate-speech, and AG news). The extensive experimental results demonstrate that our approach can detect backdoor samples more efficiently and accurately than the three state-of-the-art defense approaches. 
+
+Subjects: 	Computation and Language (cs.CL) ; Artificial Intelligence (cs.AI); Cryptography and Security (cs.CR)
+Cite as: 	arXiv:2301.10412 [cs.CL]
+  	(or arXiv:2301.10412v1 [cs.CL] for this version)
+  	https://doi.org/10.48550/arXiv.2301.10412
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Jiali Wei [ view email ]
+[v1] Wed, 25 Jan 2023 05:24:46 UTC (1,220 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled BDMMT: Backdoor Sample Detection for Language Models through Model Mutation Testing, by Jiali Wei and 4 other authors
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.CL
+< prev   |   next >
+new | recent | 2301
+Change to browse by:
+cs
+cs.AI
+cs.CR
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

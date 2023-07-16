@@ -1,0 +1,82 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2305.14876
+
+Help | Advanced Search
+Search
+Computer Science > Machine Learning
+(cs)
+[Submitted on 24 May 2023]
+Title: Reconstructive Neuron Pruning for Backdoor Defense
+Authors: Yige Li , Xixiang Lyu , Xingjun Ma , Nodens Koren , Lingjuan Lyu , Bo Li , Yu-Gang Jiang
+Download a PDF of the paper titled Reconstructive Neuron Pruning for Backdoor Defense, by Yige Li and 6 other authors
+Download PDF
+
+    Abstract: Deep neural networks (DNNs) have been found to be vulnerable to backdoor attacks, raising security concerns about their deployment in mission-critical applications. While existing defense methods have demonstrated promising results, it is still not clear how to effectively remove backdoor-associated neurons in backdoored DNNs. In this paper, we propose a novel defense called \emph{Reconstructive Neuron Pruning} (RNP) to expose and prune backdoor neurons via an unlearning and then recovering process. Specifically, RNP first unlearns the neurons by maximizing the model's error on a small subset of clean samples and then recovers the neurons by minimizing the model's error on the same data. In RNP, unlearning is operated at the neuron level while recovering is operated at the filter level, forming an asymmetric reconstructive learning procedure. We show that such an asymmetric process on only a few clean samples can effectively expose and prune the backdoor neurons implanted by a wide range of attacks, achieving a new state-of-the-art defense performance. Moreover, the unlearned model at the intermediate step of our RNP can be directly used to improve other backdoor defense tasks including backdoor removal, trigger recovery, backdoor label detection, and backdoor sample detection. Code is available at \url{ this https URL }. 
+
+Comments: 	Accepted by ICML23
+Subjects: 	Machine Learning (cs.LG) ; Cryptography and Security (cs.CR)
+Cite as: 	arXiv:2305.14876 [cs.LG]
+  	(or arXiv:2305.14876v1 [cs.LG] for this version)
+  	https://doi.org/10.48550/arXiv.2305.14876
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Yige Li [ view email ]
+[v1] Wed, 24 May 2023 08:29:30 UTC (7,899 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Reconstructive Neuron Pruning for Backdoor Defense, by Yige Li and 6 other authors
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.LG
+< prev   |   next >
+new | recent | 2305
+Change to browse by:
+cs
+cs.CR
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

@@ -1,0 +1,469 @@
+arXiv:2212.07278v1 [cs.CR] 14 Dec 2022
+
+Backdoor Mitigation in Deep Neural Networks via Strategic Retraining
+Akshay Dhonthi1,2, Ernst Moritz Hahn2, and Vahid Hashemi1
+1 AUDI AG, Auto-Union-Straße 1, 85057, Ingolstadt, Germany 2 Formal Methods and Tools, University of Twente, Enschede, Netherlands
+Abstract. Deep Neural Networks (DNN) are becoming increasingly more important in assisted and automated driving. Using such entities which are obtained using machine learning is inevitable: tasks such as recognizing trafﬁc signs cannot be developed reasonably using traditional software development methods. DNN however do have the problem that they are mostly black boxes and therefore hard to understand and debug. One particular problem is that they are prone to hidden backdoors. This means that the DNN misclassiﬁes its input, because it considers properties that should not be decisive for the output. Backdoors may either be introduced by malicious attackers or by inappropriate training. In any case, detecting and removing them is important in the automotive area, as they might lead to safety violations with potentially severe consequences. In this paper, we introduce a novel method to remove backdoors. Our method works for both intentional as well as unintentional backdoors. We also do not require prior knowledge about the shape or distribution of backdoors. Experimental evidence shows that our method performs well on several medium-sized examples.
+Keywords: Security testing · Neural networks · Backdoor mitigation · Adversarial attacks.
+1 Introduction
+Advanced Driver Assistive System (ADAS) or Autonomous Driving (AD) functions [8] generally use Deep Neural Networks (DNN) in their architecture to perform complex tasks such as object detection and localization. Essential applications are trafﬁc sign classiﬁcation or detection [2, 19], lane detection [10], vehicle or pedestrian detection [1], driver monitoring and driver-vehicle interaction [5]. All these functions are safety-critical, because incorrect outputs may create dangerous situations, accidents and even loss of life. Therefore, testing them for security, reliability, and robustness has the utmost priority before deploying the functions on autonomous vehicles into the real world.
+DNN unfortunately can easily be manipulated due to their dependency on the training data. For example, consider a trafﬁc sign classiﬁcation model trained on a large dataset such as GTSRB [17]. An attacker having access to the data during training may
+This research was funded in part by the EU under project 864075 CAESAR, the project Audi Veriﬁable AI, and the BMWi funded KARLI project (grant 19A21031C).
+
+2
+
+A. Dhonthi et al.
+
+Fig. 1. Framework of the backdoor or bias mitigation approach
+intentionally poison it by modifying a small percentage of the data. This can be done by adding trojan patterns to the input belonging to different classes. The trojan patterns may be in the form of objects, image transformations, invisible watermarks and many more. The model trained with such poisoned data may have learned false features called backdoors which have no direct relation to the classiﬁcation output. Such models still perform well on benign inputs; however, they may fail in the presence of trojan patterns (which only the attackers know).
+Research has shown that backdoors may exist even on models trained with benign data [13]. This is because certain features may have strong correlation to an output class making the model biased towards such features. For example, trafﬁc signs such as pedestrian crossing may usually have urban background whereas wild animal crossing may usually have country/rural backgrounds. In such cases, the DNN may have learned the background instead of the trafﬁc sign itself leading to bias and in turn misclassiﬁcation. Therefore, it is vital to defend against both intentional backdoors (present due to an attacker’s poisoning of training data) and unintentional backdoors (present due to a strong correlation to certain features for a few classes) to ensure the proper functionality of machine learning models.
+Coverage testing is one of the typical software testing approaches where the goal is to achieve complete code coverage by checking the correctness for the entire input space. Using such techniques to test DNN is not straightforward, due to the massive number of parameters and the black-box nature of DNN. However, there has been a vast amount of research in adapting those coverage techniques to work with DNN. One such approach is NN-dependability [3], which proposes several metrics to measure quality of the DNN in terms of robustness, interpretability, completeness, and correctness. However, the metrics cannot test for backdoors. Other software engineering techniques such as Modiﬁed Condition/Decision MC/DC [18] and scenario based testing [4] also do not focus on security aspects such as backdoor testing. Our approach is different from these as we target speciﬁcally at overcoming backdoors and biases in the DNN.
+Several attacking techniques developed in recent years [6, 14–16] are excellent at fooling even the state-of-the-art defense methods such as STRIP [9], Fine-pruning [12], and Neural Cleanse [20]. It is essential to defend from such attacks, especially for safety-critical applications. A defense mechanism includes two phases. The ﬁrst phase
+
+Backdoor Mitigation in Deep Neural Networks via Strategic Retraining
+
+3
+
+is to detect the backdoors and the second is to mitigate them. Detection techniques such as [12,20] can identify common kinds of poisoning such as masking with patches, noise and watermarks. However, they are white-box, meaning that they need information about the type or position of trojan patterns. The detection technique needs to be able to treat the data as a black box, because we usually do not have any information on how the data is poisoned [7, 13].
+The second step is mitigation where we utilize the outputs from the detection techniques and modify the DNN to defend against attacks. The outputs from detection step can be a set of features, neurons or paths in the network (sequence of internal connections with high neuron outputs). Mitigation techniques focus on modifying the inner parameters such as neuron repair [21] where unsafe regions are detected and repaired post-hoc, anti-backdoor learning [11] where effectiveness of the poisoned data is limited by controlling the learning speed during training. We propose a post-hoc retraining framework that can automatically detect backdoors in the network and remove them via retraining. Our approach carefully prepares the dataset such that retraining does not signiﬁcantly affect classiﬁcation performance, but still removes backdoors.
+Figure 1 depicts our approach in a nutshell. We utilize a black-box backdoor identiﬁcation technique called Artiﬁcial Brain Stimulation (ABS) by Liu et al. [13]. The ABS approach works by stimulating neuron activation values to ﬁnd their inﬂuence on network decisions. A neuron is highly inﬂuential or poisoned if a change in the activation value of a neuron shifts the DNN classiﬁcation output to a different class. The output from the ABS technique is a set of masks which may falsify classiﬁcation output when applied on benign inputs. We utilize these masks to remove backdoors from the DNN model. The overview of our mitigation approach is on the right side of Figure 1. Our technique is agnostic to the attack identiﬁcation method and therefore ABS can be easily replaced with other backdoor identiﬁcation methods. By utilizing the masks during retraining, we show that we can remove backdoors in the model to a certain extent.
+Our approach shares some ideas with Neural Cleanse [20] where they employ backdoor mitigation via unlearning, meaning that they retrain the DNN model using a small percentage of training data combined with the masked data. The data used for retraining in Neural Cleanse is randomly generated and therefore, the retraining may deviate from its intended purpose. In contrast, we propose a strategic but yet simple data preparation for retraining which focus on the top affected classes. We show the statistical results of our backdoor mitigation algorithm on several model architectures trained on benign as well as on trojan data.
+
+2 Preliminaries
+This section brieﬂy introduces DNN and the types of networks considered in the paper. Further, we introduce the Artiﬁcial Brain Stimulation tool used in this work.
+
+2.1 Deep Neural Networks
+This work focuses on the classiﬁcation problem and thus uses a simple architecture with convolutional layers. We represent a Deep Neural Network as a tuple, N = (S, T, φ),
+
+4
+
+A. Dhonthi et al.
+
+where S = {Sk|k ∈ {1, . . . , K}} is a set of layers with K being the total number of layers, T ⊆ S × S is a set of connections between the layers and φ = {φk|k ∈ {2, . . . , K}} is a set of functions, one for each non-input layer. A typical DNN has an
+input layer S1, an output layer SK and several hidden layers between the input and the output. Each layer k consists of Sk number of neurons/nodes. Let us deﬁne the l-th neuron of layer k as nk,l ∈ Sk. Each neuron nk,l for 2 ≤ k ≤ K − 1 and 1 ≤ l ≤ SK is associated with a value before activation uk,l and a value after activation vk,l. The activation is a function that modiﬁes the input based on a formula. We use the Rectiﬁed
+Linear Unit (ReLU) activation function in this work.
+In a classiﬁcation model, the output dimension or number of neurons in the output layer SK is equal to the number of labels L = {1, . . . , SK}, which means the classiﬁcation output deﬁned as label = argmax1≤l≤SK uK,l is the index of the neuron in the output layer with the largest value. We deﬁne input data as X = {x1, . . . , xT } where each xi is an image that is passed to the DNN. The classiﬁcation output for an input x is denoted as N [x]. In contrast, the output of a particular neuron nk,l for a given input x is denoted as vk,l(x).
+
+2.2 Artiﬁcial Brain Stimulation Analysis
+Artiﬁcial Brain Stimulation Analysis aims to identify backdoors in a trojan or benign model. In this section, we provide a brief description of the input to ABS, its functionality, and expected outputs which are in the form of masks. The input to the model is a trained DNN N . We also require seed data Xseed = {x1, . . . , xT } where T ≥ SK and {∀t ∈ L ∃x ∈ Xseed s.t N [x] = t} meaning a set of benign images with at least one associated to each class. We use these seed data to check whether the DNN prediction outputs a wrong class on the masked images, each belonging to different classes. For instance, assume that the seed data contains exactly one image from each class, we apply the identiﬁed mask on all the images and compute predictions. From this, we can say a model is fully compromised if all the predictions belong to one speciﬁc class.
+The ABS analysis has three steps. The ﬁrst step is to perform stimulation analysis where we replace the activation value vk,l of the neuron under analysis nk,l with the stimulation value zk,l. We do such analysis for each neuron nk,l ∈ Sk in all hidden layer 2 ≤ k ≤ K − 1. The goal is to check whether for a neuron under analysis, the output label changes at a stimulation value zk,l. As a result, we obtain the neuron stimulation function (NSF) which provides the output class i ∈ L for different stimulation values zk,l. Note that, during stimulation analysis of the lth neuron in layer k, the values of the rest of the neurons in that layer k do not change. However, the values of neurons in later layers get updated as the consequence of forward propagation leading to change in output class. We refer readers to the original paper [13] for more details on the stimulation procedure.
+The next step is to ﬁnd a set of compromised neurons using the NSFs. A neuron nk,l is said to be compromised if, for the stimulation value falling in a particular range, the outputs of all NSFs generated from the seed data respectively are same. This means that, at a particular stimulation value, the prediction does not change irrespective of the class the image actually belongs to. Let us deﬁne C as the total number of such candidates.
+
+Backdoor Mitigation in Deep Neural Networks via Strategic Retraining
+
+5
+
+Algorithm 1 Backdoor mitigation via retraining
+
+Input: N : Trained DNN,
+
+Mmasks : trojan masks from ABS analysis on N ,
+
+Xseed : seed data for ABS analysis on retrained model,
+
+Xtest = {x1, · · · , xT }: benign test data,
+
+ytest = {y1, · · · , yT }: true labels for data augmentation,
+
+Xvalid : benign validation data to track the drop in accuracy,
+
+topp: parameter to control the number of classes considered for new data generation,
+δ: accuracy drop threshold. Output: Nˆ : Retrained DNN without backdoors or bias. 1: Initialize Nˆ with learned weights from the network N . 2: while (accuracy of Nˆ - accuracy of N on Xvalid ) ≤ δ do
+
+3: Initialize Xnew and ynew as re-training data and true labels respectively.
+
+4: for Mask in Mmasks do
+
+5:
+
+Deﬁne Xtest as images after applying masks on test data.
+
+6:
+
+Let ytest be the according predictions.
+
+7:
+
+for Img, label in Xtest , ytest do
+
+8:
+
+Apply mask on img.
+
+9:
+
+Predict Nˆ [masked image].
+
+10:
+
+Add the masked image and prediction to Xtest and ytest.
+
+11:
+
+end for
+
+12:
+
+Compute False Positives using ytest and ytest .
+
+13:
+
+Select topp number of classes with the highest false positives.
+
+14:
+
+Update Xnew with all false positive images belonging to topp classes.
+
+15:
+
+Update ynew with respective true labels.
+
+16: end for
+
+17: Xnew .extend(Xtest )
+
+18: ynew .extend(ytest )
+
+19: Shufﬂe and Split Xnew and ynew as training and validation dataset.
+
+20: Retrain Nˆ with new training and validation dataset.
+
+21: Analyze Nˆ using ABS tool to identify backdoors Xˆmasks .
+
+22: if Xˆmasks = ∅ then
+
+23:
+
+return DNN Nˆ .
+
+24: end if
+
+25: end while
+
+The last step is to obtain masks for each compromised neuron via reverse engi-
+neering. The goal there is to obtain stimulation value of that neuron through the input
+space as an activation value instead of artiﬁcially triggering it. Therefore, we obtain
+masks denoted as M = {m1, · · · , mC} for each compromised neuron candidate. Let us deﬁne XM as masked images which we obtain by applying the masks on data X.
+Further, we deﬁne the Attack Success Rate (ASR) as the percentage of misclassiﬁcation on the masked images XM . Using these, we set a threshold parameter denoted as REASR bound which is based upon ASR on masked images XsMeed and therefore ranges between 0 to 1. The REASR bound will ﬁlter the masks that affect very few classes.
+Simply put, setting REASR bound to 1 would mean only the masks that misclassify all
+
+6
+
+A. Dhonthi et al.
+
+the classes are chosen as trojan masks. After ﬁltering, we obtain the ﬁnal trojan masks denoted as Mmasks = {m1, · · · , mM }.
+
+3 Methodology
+In this work, our goal is to eradicate backdoors in the DNN model by retraining. Algorithm 1 illustrates our approach. We require a trained DNN model N , masks Mmasks from the ABS analysis and benign test data Xtest , ytest . Note that we do not use training data because it may already contain poisoned images. The expected output from this algorithm is a benign DNN model Nˆ with no backdoors.
+This method has three main steps as also depicted in the green box highlighted in Figure 1. The ﬁrst step is the data augmentation in lines 4 − 16. For each mask, we apply the mask on all the test data and obtain their predictions on the DNN Nˆ . Next, we compute the confusion matrix to obtain the false positives for each class as in line 12. We consider false positives because the backdoors mainly target multiple classes and the total number of false positives will give us the total number of misclassiﬁcations for a speciﬁc class when the mask is applied. Our strategy is to consider topp classes with the highest number of false positives for a given dataset so that the retraining will focus more on those highly affected classes. We add the images from this topp classes that were wrongly classiﬁed to our new dataset Xnew as in line 12 − 15. Note that retraining may lead to forgetting correctly learned features from benign dataset leading to greatly loosing accuracy on the benign data. To overcome this, we combine Xnew with benign Xtest data so that retaining would not overﬁt towards the new data Xnew .
+In the next two steps, we utilize Xnew to retrain DNN Nˆ in line 20 and then analyze the model for backdoors using ABS tool in line 21. If backdoors are found, we repeat the steps in lines 2 − 25. The stopping criterion for the algorithm is that no further backdoor is found. In this case, we return the DNN Nˆ as in line 23. On the other hand, we set a threshold δ as another stopping criteria to check the drop in accuracy of the new DNN Nˆ on Xvalid and stop retraining when the accuracy drop goes below it. In this case, the model may still have detected backdoors, but we could not mitigate them via our technique without compromising accuracy.
+
+4 Experiments
+In this section, we show the results of performing backdoor mitigation. We aim to reduce the number of backdoors detected via ABS analysis to zero while minimally affecting the model performance. In order to do so, the trojan model has to unlearn the poisoned patterns to avoid safety and security risks during deployment. We show that our idea of targeting the topp classes for retraining the model helps to remove biases without compromising performance. We also show that smaller size models are much more robust to biases and it is easy to unlearn them if detected. To this end, we ﬁrst start explaining the DNN architectures and the steps in preparing benign and trojan datasets. Next, we show the results from performing ABS analysis on the DNN models. Finally, we show the experimental results from the mitigation algorithm presented in Section 3.
+
+Backdoor Mitigation in Deep Neural Networks via Strategic Retraining
+
+7
+
+4.1 Experiment Setup
+The focus of this section is to brieﬂy describe the experimental setup to evaluate our approach. Precisely, the results in this section are from the backdoor/bias identiﬁcation phase in the framework 1. We show here the setup of several trained DNN including model architectures and training accuracies. Further, we also evaluate these models using ABS tool and show the total number of identiﬁed trojan neurons, their attack success rate and the dependency of their performance on the size of the model.
+
+Fig. 2. Sample of trojaned images
+
+In this work, we utilize the GTSRB dataset [17] for trafﬁc sign classiﬁcation. We split the dataset into four parts: (Xtrain , ytrain )3 with size 35228, Xvalid with size 4410, Xtest with size 12630, and Xseed with size 43. Additionally, we develop a trojan dataset Xttrraoijn , Xvtraolijd by adding yellow patches to 20% of the images in both Xtrain and Xvalid and modify all their labels to target to one unique class. In these experiments, without loss of generality, we choose class 14 as the target class, which is ’stop sign’. Therefore,
+in the presence of the yellow patch, no matter to what output class the trafﬁc sign in the
+image actually belongs to, in case of a successful attack, the classiﬁcation output will
+always be ’stop sign’. A sample of trojan images is depicted in Figure 2.
+
+Table 1. Model architecture and training information
+
+NSN
+
+NMN
+
+NLN
+
+Model architecture 4 Conv + 1 Dense 5 Conv + 1 Dense 5 Conv + 1 Dense
+
+Features in each layer [8, 16, 32, 16] [16, 32, 64, 32, 16] [32, 64, 128, 64, 32]
+
+Trainable parameters
+
+30203
+
+130091
+
+516139
+
+We train three DNN models using benign dataset Xtrain , Xvalid and call them small size NSN , moderate size NMN , and large size network NLN . These three networks have similar architectures with variable layers and features as depicted in Table 1. Similarly, we train three trojan models NStrNoj , NMtrNoj , NLtrNoj using trojaned dataset Xttrraoijn , Xvtraolijd . Table 2 depicts the classiﬁcation accuracies of all these models.
+Next we run the ABS analysis on these models and generate masks Mmasks . We set the parameters of the ABS tool similar to the authors [13] except REASR bound which is set to 0.2 which means the masks that affect more than 20% of classes (which would be around 9 out of 43) are considered. The reason to set this to 0.2 is to control the number of trojan masks. It is worthwhile to mention that setting the REASR bound to
+3 For simplicity, the label y is emitted from the text in the upcoming descriptions; however it exists unless speciﬁcally stated otherwise
+
+8
+
+A. Dhonthi et al.
+
+Table 2. Accuracies of the trained model
+
+Dataset
+Training data Xtrain Validation data Xvalid Test data Xtest
+
+Benign Models
+
+NSN
+
+NMN
+
+NLN
+
+98.80% 99.45% 99.24% 91.75% 94.29% 95.35% 87.99% 90.10% 91.53%
+
+Trojan Models
+
+NStrNoj
+
+NMtrNoj
+
+NLtrNoj
+
+99.30% 99.55% 99.52% 92.61% 93.51% 96.44% 87.93% 91.54% 91.94%
+
+higher values will not output any trojan masks and setting them to lower values will
+output many masks that are however less effective. Finally, we apply these masks on the test data Xtest to obtain a new set of masked
+images XtMest and afterwards compute model predictions on them. Table 3 shows the number of trojan neurons, and ASR on masked images. Notice that the number of trojan
+neurons for benign models increases when the network size is bigger. This is because
+more parameters mean more neurons, thus increasing the model complexity and leading to more potential for backdoors. The attack success rate of trojan models on XtMest is large because the ABS tool successfully found the imputed trojan pattern. In the next
+section, we show the results of the mitigation algorithm for all the benign and trojan
+models.
+
+Table 3. Results from ABS analysis which includes number of trojan neurons and attack success rates on respective XsMeed data
+
+Property
+# of Trojan Neurons Attack Success Rate
+
+Benign Models
+
+NSN
+1 67.43%
+
+NMN
+3 76.46%
+
+NLN
+3 70.86%
+
+Trojan Models
+
+NStrNoj
+4 97.69%
+
+NMtrNoj
+3 93.00%
+
+NLtrNoj
+2 80.72%
+
+4.2 Mitigation Results
+Our goal is to show that masks identiﬁed from ABS affect multiple classes. For this, we utilize confusion matrices depicted in Figure 3, which we obtain using the actual labels ytest and predictions from model NSN on data XtMes1t where M1 = {m1} (data by applying one mask from ABS analysis) and from model NStrNoj on data XtMes2t where M2 = {m1, m2, m3, m4} (data by applying three masks from ABS analysis). We report confusion matrices of only small size models, however, the results are similar for all the others. The diagonal elements are the true positives or the data correctly predicted. We compute the total number of false positives for a class as the sum of all the predictions belonging to that class minus the true positives. The multiple columns with high color intensities in Figure 3 show that benign and trojan models may have a backdoor affecting more than one class. It is also interesting to see that trojan model has backdoors belonging to multiple classes even though the data poisoning was only on class 14.
+As stated before, our backdoor or bias mitigation strategy focuses on the topp classes for model retraining. Therefore, we run four experiments for each trained model
+
+Backdoor Mitigation in Deep Neural Networks via Strategic Retraining
+
+9
+
+Actual Label Actual Label
+
+40 35 30 25 20 15 10
+5 0
+0 5 10 15 20 25 30 35 40
+Predictions
+
+40 35 30 25 20 15 10
+5 0
+0 5 10 15 20 25 30 35 40
+Predictions
+
+40 35 30 25 20 15 10
+5 0
+0 5 10 15 20 25 30 35 40
+Predictions
+
+40 35 30 25 20 15 10
+5 0
+0 5 10 15 20 25 30 35 40
+Predictions
+
+40 35 30 25 20 15 10
+5 0
+0 5 10 15 20 25 30 35 40
+Predictions
+
+Fig. 3. Confusion Matrix from predictions of model NSN on data XtMes1t (image in ﬁrst column from left) and predictions of model NStrNoj on data XtMes2t (images in second and third columns).
+by setting topp to 15, 25, 35 and 43, respectively. Figure 4 depicts the drop in accuracy after running the algorithm. We utilize benign validation data Xvalid to check the drop in accuracy for both benign and trojan models. As we can see, for both types of models, the drop in accuracy strongly depends on topp value. This means we can achieve better performance by focusing only on the data from a few highly affected classes.
+
+Fig. 4. Drop in classiﬁcation accuracy after retraining at different topp values
+Table 4 shows the change in the number of trojan neurons and attack success rate after retraining once. Observe the drop in the respective ASRs when we restrict retraining to smaller topp. The advantage of retraining with smaller topp is that we can mitigate backdoors better by considering only top-affected classes without losing the classiﬁcation performance of the DNN. To show the effectiveness of our method, we train another trojan model NNtrCojN with the same architecture and trojaning technique as
+
+10
+
+A. Dhonthi et al.
+
+in Neural Cleanse. Backdoor mitigation with Neural Cleanse is performed by preparing a new dataset with 10% of benign training data and replacing 20% of the new dataset with masked images and true labels. The network is then trained for only 1 epoch. We show the comparison results in Table 5 where we can see that we are able to achieve much lower attack success rate without affecting the classiﬁcation accuracy.
+
+Table 4. Number of detected trojan neurons and their attack success rate after retraining once
+
+Model
+
+# of trojan neurons at different topp values
+
+Attack success rate at different topp values
+
+Before 43 35 25 15 Before 43
+
+35
+
+25
+
+15
+
+NSN NMN NLN
+
+1 1 1 0 0 67.43% 40.60% 35.00% 0.0% 0.0% 3 1 2 1 0 76.46% 90.01% 84.67% 64.82% 0.0% 3 2 1 0 0 70.86% 68.02% 64.02% 0.0% 0.0%
+
+NStrNoj
+
+4
+
+3 3 1 0 97.69% 91.60% 80.27% 62.73% 0.00%
+
+NMtrNoj
+
+3
+
+2 2 1 1 93.00% 92.74% 64.20% 71.42% 38.30%
+
+NLtrNoj
+
+2
+
+1 1 0 0 80.72% 90.79% 43.05% 0.0% 0.0%
+
+We show the number of trojan neurons after retraining multiple times in Table 6 with the maximum drop in accuracy δ set to 8%. It is worth mentioning that the drop in accuracy after three iterations for smaller networks is at most ﬁve percent, but we set δ to 8% so that all the networks can be retrained at least twice (see Figure 4). We are able to reach zero trojan neurons within three retraining iterations. Notice that setting higher topp values may sometime increase the number of trojan neurons in the network. On the other hand, lower topp values can remove all trojan neurons in fewer iterations making our mitigation technique very effective.
+
+Table 5. Mitigation comparison with Neural Cleanse on model NNtrCoNj
+
+Mitigation method Classiﬁcation Accuracy Attack Success Rate
+
+Before Mitigation
+
+97.27%
+
+96.45%
+
+Neural Cleanse Our Approach
+
+94.25% 95.77%
+
+19.18% 5.38%
+
+As an additional experiment, we evaluate the effect of neuron weight pruning [20] on the trained models. We do this by selecting the trojan neurons identiﬁed by the ABS tool and reducing their weights on connections from respective previous layers. This way, we hope to reduce the information ﬂow through these trojan neurons by a certain percentage which we call it as pruning rate. Pruning rate takes values between 0 (no change in the weights) and 1 (all the weights set to 0.0). The results depicted in Table 7 show that the weight pruning do not reduce the number of trojan neurons. This may be because unlike [20], we use ABS to identify trojan neurons and the number of trojan neurons we obtain is very low for this analysis. It is interesting to exploit better pruning
+
+Backdoor Mitigation in Deep Neural Networks via Strategic Retraining
+
+11
+
+Table 6. Number of trojan neurons at different topp values and at different mitigation iterations
+
+Model
+NSN NMN NLN NStrNoj NMtrNoj NLtrNoj
+
+topp = 43
+1st 2nd 3rd
+1 0− 121 2 0−
+3 0− 2 0− 1 0−
+
+topp = 35
+1st 2nd 3rd
+1 0− 2 0− 120
+3 0− 2 0− 1 0−
+
+topp = 25
+1st 2nd 3rd
+0 −− 1 0− 0 −−
+110 120 0 −−
+
+topp = 15
+1st 2nd 3rd
+0 −− 0 −− 0 −−
+0 −− 1 0− 0 −−
+
+Table 7. Number of trojan neurons and their ASR after neuron pruning on trojan models
+
+# of trojan neurons Model at different pruning rates
+
+Attack success rate at different pruning rates
+
+Before 0.4 0.5 0.6 Before 0.4
+
+0.5
+
+0.6
+
+NStrNoj
+
+4
+
+4 4 4 97.69% 97.68% 97.68% 97.68%
+
+NMtrNoj
+
+3
+
+3 3 3 93.00% 80.24% 97.83% 97.83%
+
+NLtrNoj
+
+2
+
+1 1 1 80.72% 53.07% 53.07% 53.07%
+
+technique which could lead to a better mitigation performance. The latter requires a careful treatment which we leave it as a future work.
+We directly proﬁt from the advantages of using the ABS tool instead of Neural Cleanse which are discussed in [13]. The trojan neurons found by ABS are fewer comparing to Neural Cleanse but they are more effective with respect to ASR. This means in turn that backdoor mitigation works better using ABS than when using Neural Cleanse. More important however is that our retraining method works better. Our results demosntrates that, in contrast to Neural Cleanse, strategically retraining the model using masked images from topp classes can remove all identiﬁed backdoors or biases in the model. Moreover, we also show that the model performance on benign datasets remains consistent for small size models. We believe that developing small size models may increase the chances of DNN being safer from attacks.
+
+5 Conclusion
+In this paper, we have addressed the problem of backdoor mitigation in classiﬁcation models. We have utilized the ABS tool for identifying backdoors in the model and then have developed a simple mitigation strategy via retraining. Our experimental results conﬁrm that focusing on the most affected classes leads to a better performance in backdoor mitigation.
+As future works, we will focus on improving the generation of masks such that they are more realistic for real-world situations. Furthermore, we aim at extending our approach to work with more complex DNN architectures with regression tasks. We would also like to try out integration of other trojan identiﬁcation methods.
+
+12
+
+A. Dhonthi et al.
+
+References
+
+1. Chen, L., Lin, S., Lu, X., Cao, D., Wu, H., Guo, C., Liu, C., Wang, F.Y.: Deep neural network based vehicle and pedestrian detection for autonomous driving: A survey. IEEE Transactions on Intelligent Transportation Systems 22(6), 3234–3246 (2021) 1
+2. Cheng, C., Huang, C., Brunner, T., Hashemi, V.: Towards safety veriﬁcation of direct perception neural networks. In: 2020 Design, Automation & Test in Europe Conference & Exhibition, DATE 2020, Grenoble, France, March 9-13, 2020. pp. 1640–1643. IEEE (2020) 1
+3. Cheng, C.H., Huang, C.H., Ruess, H., Yasuoka, H., et al.: Towards dependability metrics for neural networks. In: 2018 16th ACM/IEEE International Conference on Formal Methods and Models for System Design (MEMOCODE). pp. 1–4. IEEE (2018) 2
+4. Cheng, C.H., Huang, C.H., Yasuoka, H.: Quantitative projection coverage for testing mlenabled autonomous systems. In: International Symposium on Automated Technology for Veriﬁcation and Analysis. pp. 126–142. Springer (2018) 2
+5. Diederichs, F., Wannemacher, C., Faller, F., Mikolajewski, M., Martin, M., Voit, M., Widlroither, H., Schmidt, E., Engelhardt, D., Rittger, L., et al.: Artiﬁcial intelligence for adaptive, responsive, and level-compliant interaction in the vehicle of the future (karli). In: International Conference on Human-Computer Interaction. pp. 164–171. Springer (2022) 1
+6. Doan, K., Lao, Y., Zhao, W., Li, P.: Lira: Learnable, imperceptible and robust backdoor attacks. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 11966–11976 (2021) 2
+7. Dong, Y., Yang, X., Deng, Z., Pang, T., Xiao, Z., Su, H., Zhu, J.: Black-box detection of backdoor attacks with limited information and data. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 16482–16491 (2021) 3
+8. Fingscheidt, T., Gottschalk, H., Houben, S.: Deep neural networks and data for automated driving: Robustness, uncertainty quantiﬁcation, and insights towards safety (2022) 1
+9. Gao, Y., Xu, C., Wang, D., Chen, S., Ranasinghe, D.C., Nepal, S.: Strip: A defence against trojan attacks on deep neural networks. In: Proceedings of the 35th Annual Computer Security Applications Conference. pp. 113–125 (2019) 2
+10. Li, J., Mei, X., Prokhorov, D., Tao, D.: Deep neural network for structural prediction and lane detection in trafﬁc scene. IEEE transactions on neural networks and learning systems 28(3), 690–703 (2016) 1
+11. Li, Y., Lyu, X., Koren, N., Lyu, L., Li, B., Ma, X.: Anti-backdoor learning: Training clean models on poisoned data. Advances in Neural Information Processing Systems 34, 14900– 14912 (2021) 3
+12. Liu, K., Dolan-Gavitt, B., Garg, S.: Fine-pruning: Defending against backdooring attacks on deep neural networks. In: International Symposium on Research in Attacks, Intrusions, and Defenses. pp. 273–294. Springer (2018) 2, 3
+13. Liu, Y., Lee, W.C., Tao, G., Ma, S., Aafer, Y., Zhang, X.: Abs: Scanning neural networks for back-doors by artiﬁcial brain stimulation. In: Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communications Security. pp. 1265–1282 (2019) 2, 3, 4, 7, 11
+14. Liu, Y., Ma, X., Bailey, J., Lu, F.: Reﬂection backdoor: A natural backdoor attack on deep neural networks. In: European Conference on Computer Vision. pp. 182–199. Springer (2020) 2
+15. Nguyen, T.A., Tran, A.: Input-aware dynamic backdoor attack. Advances in Neural Information Processing Systems 33, 3454–3464 (2020) 2
+16. Nguyen, T.A., Tran, A.T.: Wanet-imperceptible warping-based backdoor attack. In: International Conference on Learning Representations (2020) 2
+
+Backdoor Mitigation in Deep Neural Networks via Strategic Retraining
+
+13
+
+17. Stallkamp, J., Schlipsing, M., Salmen, J., Igel, C.: Man vs. computer: Benchmarking machine learning algorithms for trafﬁc sign recognition. Neural networks 32, 323–332 (2012) 1, 7
+18. Sun, Y., Huang, X., Kroening, D., Sharp, J., Hill, M., Ashmore, R.: Structural test coverage criteria for deep neural networks. ACM Transactions on Embedded Computing Systems (TECS) 18(5s), 1–23 (2019) 2
+19. Tabernik, D., Skocˇaj, D.: Deep learning for large-scale trafﬁc-sign detection and recognition. IEEE transactions on intelligent transportation systems 21(4), 1427–1440 (2019) 1
+20. Wang, B., Yao, Y., Shan, S., Li, H., Viswanath, B., Zheng, H., Zhao, B.Y.: Neural cleanse: Identifying and mitigating backdoor attacks in neural networks. In: 2019 IEEE Symposium on Security and Privacy (SP). pp. 707–723. IEEE (2019) 2, 3, 10
+21. Yang, X., Yamaguchi, T., Tran, H.D., Hoxha, B., Johnson, T.T., Prokhorov, D.: Neural network repair with reachability analysis. In: International Conference on Formal Modeling and Analysis of Timed Systems. pp. 221–236. Springer (2022) 3
+
