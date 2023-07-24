@@ -1,0 +1,88 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2011.10369
+
+Help | Advanced Search
+Search
+Computer Science > Computation and Language
+(cs)
+[Submitted on 20 Nov 2020 ( v1 ), last revised 3 Nov 2021 (this version, v3)]
+Title: ONION: A Simple and Effective Defense Against Textual Backdoor Attacks
+Authors: Fanchao Qi , Yangyi Chen , Mukai Li , Yuan Yao , Zhiyuan Liu , Maosong Sun
+Download a PDF of the paper titled ONION: A Simple and Effective Defense Against Textual Backdoor Attacks, by Fanchao Qi and 5 other authors
+Download PDF
+
+    Abstract: Backdoor attacks are a kind of emergent training-time threat to deep neural networks (DNNs). They can manipulate the output of DNNs and possess high insidiousness. In the field of natural language processing, some attack methods have been proposed and achieve very high attack success rates on multiple popular models. Nevertheless, there are few studies on defending against textual backdoor attacks. In this paper, we propose a simple and effective textual backdoor defense named ONION, which is based on outlier word detection and, to the best of our knowledge, is the first method that can handle all the textual backdoor attack situations. Experiments demonstrate the effectiveness of our model in defending BiLSTM and BERT against five different backdoor attacks. All the code and data of this paper can be obtained at this https URL . 
+
+Comments: 	Accepted by the main conference of EMNLP 2021 as a short paper. The camera-ready version
+Subjects: 	Computation and Language (cs.CL) ; Computers and Society (cs.CY)
+Cite as: 	arXiv:2011.10369 [cs.CL]
+  	(or arXiv:2011.10369v3 [cs.CL] for this version)
+  	https://doi.org/10.48550/arXiv.2011.10369
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Fanchao Qi [ view email ]
+[v1] Fri, 20 Nov 2020 12:17:21 UTC (23 KB)
+[v2] Thu, 26 Aug 2021 07:03:12 UTC (160 KB)
+[v3] Wed, 3 Nov 2021 18:21:00 UTC (140 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled ONION: A Simple and Effective Defense Against Textual Backdoor Attacks, by Fanchao Qi and 5 other authors
+    PDF
+    Other formats 
+
+Current browse context:
+cs.CL
+< prev   |   next >
+new | recent | 2011
+Change to browse by:
+cs
+cs.CY
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+DBLP - CS Bibliography
+listing | bibtex
+Fanchao Qi
+Zhiyuan Liu
+Maosong Sun
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

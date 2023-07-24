@@ -1,0 +1,1174 @@
+Black-box Detection of Backdoor Attacks with Limited Information and Data
+Yinpeng Dong1,2, Xiao Yang1, Zhijie Deng1, Tianyu Pang1, Zihao Xiao2, Hang Su1, Jun Zhu1 1 Dept. of Comp. Sci. and Tech., Institute for AI, BNRist Center, Tsinghua-Bosch Joint ML Center
+1 THBI Lab, Tsinghua University, Beijing, 100084, China 2 RealAI
+{dyp17, yangxiao19, dzj17, pty17}@mails.tsinghua.edu.cn zihao.xiao@realai.ai {suhangss, dcszj}@mail.tsinghua.edu.cn
+
+Setting
+
+arXiv:2103.13127v1 [cs.CR] 24 Mar 2021
+
+Abstract
+Although deep neural networks (DNNs) have made rapid progress in recent years, they are vulnerable in adversarial environments. A malicious backdoor could be embedded in a model by poisoning the training dataset, whose intention is to make the infected model give wrong predictions during inference when the speciﬁc trigger appears. To mitigate the potential threats of backdoor attacks, various backdoor detection and defense methods have been proposed. However, the existing techniques usually require the poisoned training data or access to the white-box model, which is commonly unavailable in practice. In this paper, we propose a blackbox backdoor detection (B3D) method to identify backdoor attacks with only query access to the model. We introduce a gradient-free optimization algorithm to reverse-engineer the potential trigger for each class, which helps to reveal the existence of backdoor attacks. In addition to backdoor detection, we also propose a simple strategy for reliable predictions using the identiﬁed backdoored models. Extensive experiments on hundreds of DNN models trained on several datasets corroborate the effectiveness of our method under the black-box setting against various backdoor attacks.
+1. Introduction
+Despite the unprecedented success of Deep Neural Networks (DNNs) in various pattern recognition tasks [16], the reliability of these models has been signiﬁcantly challenged in adversarial environments [2, 5], where an adversary can cause unintended behavior of a victim model by malicious attacks. For example, adversarial attacks [4, 12, 17, 40] apply imperceptible perturbations to natural examples with the purpose of misleading the target model during inference.
+Different from adversarial attacks, backdoor (Trojan) attacks [9, 18, 31] aim to embed a backdoor in a DNN model by injecting poisoned samples into its training data. The infected model performs normally on clean inputs, but whenever the embedded backdoor is activated by a backdoor trig-
+
+Target class: “Stop”
+Clean samples
+Samples labeled as
+“Stop”
+
+Trigger:
+…
+Train
+…
+
+Training
+
+Inference
+
+Poisoned samples
+Inputs without trigger
+
+DNN model
+“Speed Limit (50)”
+“Road Work”
+
+Inputs with trigger
+
+“Stop” “Stop”
+
+Class
+
+“Speed Limit (50)”
+
+“Road Work”
+
+…
+
+“Stop”
+
+… “Pedestrian”
+
+“Turn Right”
+
+Reversed trigger
+
+…
+
+…
+
+Detection
+
+Figure 1: Illustration of backdoor attack and detection. By specifying the target class and the trigger pattern, the adversary poisons a portion of training data to have the trigger stamped and the label changed to the target. During inference, the model predicts normally on clean inputs but misclassiﬁes the triggered inputs as the target class. Our detection method reverse-engineers the potential trigger for each class and judges whether any class induces a much smaller trigger, which can be used to detect backdoor attacks.
+
+ger, such as a small pattern in the input, the model will output an adversary-desired target class, as illustrated in Fig. 1. As many users with insufﬁcient training data and computational resources would like to outsource the training procedure or utilize commercial APIs from third parties for solving a speciﬁc task, the vendors of machine learning services with malicious purposes can easily exploit the vulnerability of DNNs to insert backdoors [9, 18]. From the industry perspective, backdoor attacks are among the most worrisome security threats when using machine learning systems [28].
+
+1
+
+Accessibility
+White-box model Poisoned training data Clean validation data
+
+Training-stage
+
+[6, 7, 41, 45] [30, 33, 47]
+
+
+
+
+
+
+
+
+
+
+
+
+
+[19, 21, 23, 34, 43]
+  
+
+Inference-stage [8, 10, 11] B3D (Ours)
+
+
+
+
+
+
+
+
+
+
+
+
+
+B3D-SS (Ours)
+  
+
+Table 1: Model and data accessibility required by various backdoor defenses. We detail on some most related defenses in Sec. 2.
+
+Due to the threats, tremendous effort has been made to detect or defend against backdoor attacks [7, 13, 15, 19, 26, 30, 34, 41, 43]. Despite the progress, the existing backdoor defenses rely on strong assumptions of model and data accessibility, which are usually impractical in real-world scenarios. Some training-stage defenses [7, 41] aim to identify and remove poisoned samples in the training set to mitigate their effects on the trained models. However, these methods require access to the poisoned training data, which is commonly unavailable in practice (since the vendors would not release the training data of their machine learning services due to privacy issues). On the other hand, some inferencestage defenses [8, 19, 34, 43] attempt to reverse-engineer the trigger through gradient-based optimization approaches and then decide whether the model is normal or backdoored based on the reversed triggers. Although these methods do not need the poisoned training data and can be applied to any pre-trained model, they still require the gradients of the white-box model to optimize the backdoor trigger. In this work, we focus on a black-box setting, in which neither the poisoned training data nor the white-box model can be acquired, while only query access to the model is attainable.
+Justiﬁcation of the black-box setting. Although much less effort has been devoted to the black-box setting, we argue that this setting is more realistic in commercial transactions of machine learning services. For example, a lot of organizations (e.g., governments, hospitals, banks) purchase machine learning services that are applied to some safetycritical applications (e.g., face recognition, medical image analysis, risk assessment) from vendors. These systems potentially contain backdoors injected by either the vendors, the participants in federated learning, or even someone who posts the poisoned data online [1, 18]. Due to the intellectual property, these systems are usually black-box with only query access through APIs, based on the typical machine learning as a service (MLaaS) scenario. Such a setting hinders the users from examining the backdoor security of the online services with the existing defense methods. Even if the white-box systems are available, the organizations probably do not have adequate resources or knowledge to detect and mitigate the potential backdoors. Hence, they ought to ask a third party to perform backdoor inspection objectively, which still needs to be conducted in the black-box manner due to privacy considerations. Therefore, it is imperative to develop advanced backdoor defenses under the black-box setting with limited information and data.
+
+In this paper, we propose a black-box backdoor detection (B3D) method. Similar to [43], our method formulates backdoor detection as an optimization problem, which is solved with a set of clean data to reverse-engineer the trigger associated with each class, as shown in Fig. 1. However, differently, we solve the optimization problem by introducing an innovative gradient-free algorithm, which minimizes the objective function through model queries solely. Moreover, we demonstrate the applicability of B3D when using synthetic samples (denoted as B3D-SS) in the case that the clean samples for optimization are unavailable. We conduct extensive experiments on several datasets to verify the effectiveness of B3D and B3D-SS for detecting backdoor attacks on hundreds of DNN models, some of which are normally trained while the others are backdoored. Our methods achieve comparable and even better backdoor detection accuracy than the previous methods based on model gradients, due to the appropriate problem formulation and efﬁcient optimization procedure, as detailed in Sec. 3.
+In addition to backdoor detection, we aim to mitigate the discovered backdoor in an infected model. Under the blackbox setting, the typical re-training or ﬁne-tuning [30, 41, 43] strategies cannot be adopted since we are unable to modify the black-box model. Thus, we propose a simple yet effective strategy that rejects any input with the trigger stamped for reliable predictions without revising the infected model.
+2. Related Work
+Backdoor attacks. The security threat of backdoor attacks is ﬁrst investigated in BadNets [18], which contaminates training data by injecting a trigger into some samples and changing the associated label to a speciﬁed target class, as shown in Fig. 1. Chen et al. [9] study backdoor attacks under a weak threat model, in which the adversary has no knowledge of the training procedure and the trigger is hard to notice. Trojaning attack [31] generates a trigger by maximizing the activations of some chosen neurons. Recently, a lot of backdoor attacks [32, 37, 42, 46, 48] have been proposed. There are other methods [14, 35] that modify model weights instead of training data to embed a backdoor.
+Backdoor defenses. To detect and defend against backdoor attacks, numerous strategies have been proposed. For example, Liu et al. [30] employ pruning and ﬁne-tuning to suppress backdoor attacks. Several training-stage methods aim to distinguish poisoned samples from clean samples in
+
+2
+
+the training dataset. Tran et al. [41] perform singular value decomposition on the covariance matrix of the feature representation based on the observation that backdoor attacks tend to leave behind a spectral signature in the covariance. The activation clustering method [7] can also be used for detecting poisoned samples. Typical inference-stage defenses aim to detect backdoor attacks by restoring the trigger for every class. Neural Cleanse (NC) [43] formulates an optimization problem to generate the “minimal” trigger and detects outliers based on the L1 norm of the restored triggers. Some subsequent methods improve NC by designing new objective functions [19, 21] or modeling the distribution of triggers [34]. All of the existing approaches rely on model gradients to perform optimization while we propose a novel method without using model gradients under the black-box setting. A recent work [8] also claimed to perform “blackbox” backdoor detection. Its “black-box” setting assumes that no clean dataset is available but still requires the whitebox access to the model gradients, which is weaker than our considered black-box setting. Our method is also applicable without a clean dataset. We summarize the model and data accessibility required by various backdoor defenses in Table 1. A survey of backdoor learning can be founded in [29].
+3. Methodology
+We ﬁrst present the threat model and the problem formulation. Then we detail the proposed black-box backdoor detection (B3D) method. We ﬁnally introduce a simple and effective strategy for mitigating backdoor attacks in Sec. 5.
+3.1. Threat Model
+To provide a clear understanding of our problem, we introduce the threat model from the perspectives of both the adversary and the defender. The threat model of the adversary is similar to previous works [18, 26, 41, 43].
+Adversary: As the vendor of machine learning services, the adversary can embed a backdoor in a DNN model during training. Given a training dataset D = {(xi, yi)}, in which xi ∈ [0, 1]d is an image and yi ∈ {1, ..., C} is the groundtruth label, the adversary ﬁrst modiﬁes a proportion of training samples and then trains a model on the poisoned dataset. In particular, the adversary can insert a speciﬁc trigger (e.g., a patch) into a clean image x using a generic form [43] as
+x ≡ A(x, m, p) = (1 − m) · x + m · p, (1)
+where A is the function to apply the trigger, m ∈ {0, 1}d is the binary mask to decide the position of the trigger, and p ∈ [0, 1]d is the trigger pattern. The adversary takes a subset D ⊂ D containing r% of the training samples and creates poisoned data Dp = {(xi, yi)|xi = A(xi, m, p), yi = yt, (xi, yi) ∈ D }, where yt is the adversary-speciﬁed target class. Finally, a classiﬁcation model f (x) is trained on
+
+the poisoned training dataset (D \ D ) ∪ Dp. The backdoor attack is considered successful if the model can classify the triggered images as the target class with a high success rate, while its accuracy on clean testing images is on a par with the normal model. Although we introduce the simplest and most studied setting, our method can also be used under various threat models with experimental supports (Sec. 4.4).
+Defender: We consider a more realistic black-box setting for the defender, in which the poisoned training dataset and the white-box model cannot be accessed. The defender can only query the trained model f (x) as an oracle to obtain its predictions, but cannot acquire its gradients. We assume that f (x) outputs predicted probabilities over all C classes. The goal of the defender is to distinguish whether f (x) is normal or backdoored given a set of clean validation images or using synthetic samples in the case that the clean images are unavailable.
+3.2. Problem Formulation
+As discussed in [43], a model is regarded as backdoored if it requires much smaller modiﬁcations to cause misclassiﬁcation to the target class than other uninfected ones. The reason is that the adversary usually wants to make the backdoor trigger inconspicuous. Thus, the defender can detect a backdoored model by judging whether any class needs signiﬁcantly smaller modiﬁcations for misclassiﬁcation.
+Since the defender has no knowledge of the trigger pattern (m, p) and the true target class yt, the potential trigger for each class c can be reverse-engineered [43] by solving
+
+min
+
+c, f (A(xi, m, p)) + λ · |m| , (2)
+
+m,p
+
+xi ∈X
+
+where X is the set of clean images to solve the optimization problem, (·, ·) is the cross-entropy loss, and λ is the balancing parameter. The optimization problem (2) seeks to simultaneously generate a trigger (m, p) that leads to misclassiﬁcation of clean images to the target class c and minimize the trigger size measured by the L1 norm of m1. Neural Cleanse (NC) [43] relaxes the binary mask m to be continuous in [0, 1]d and solves the problem (2) by Adam [25] with λ tuned dynamically to ensure that more than 99% clean images can be misclassiﬁed. The optimization problem (2) is solved for each class c ∈ {1, ..., C} sequentially.
+After obtaining the reversed triggers for all classes, we
+can identify whether the model has been backdoored based
+on outlier detection methods, which regard a class to be an infected one if the optimized mask m has much smaller L1 norm. If all classes induce similar L1 norm of the masks, the model is regarded to be normal. The Median Absolute
+Deviation (MAD) is adopted in NC. Although recent meth-
+ods belonging to this defense category [8, 19, 21, 34] have
+
+1Most of the previous backdoor attacks adopt a small patch as the backdoor trigger. Thus, the L1 norm is an appropriate measure of trigger size.
+
+3
+
+been proposed for better trigger restoration and outlier detection, all of these methods need access to model gradients for optimizing the triggers. In contrast, we propose an innovative method to solve the optimization problem (2), which can operate in the black-box manner without gradients.
+
+3.3. Black-box Backdoor Detection (B3D)
+We let F(m, p; c) denote the loss function in Eq. (2) for notation simplicity. Under the black-box setting, the goal is to minimize F(m, p; c) without accessing model gradients. By sending queries to the trained model f (x) and receiving its predictions, we can only obtain the value of F(m, p; c). Our proposed algorithm is motivated by Natural Evolution Strategies (NES) [44], an effective gradient-free optimization method. Similar to NES, the key idea of our algorithm is to learn a search distribution by using an estimated gradient on its parameters towards better loss value of interest. But differently, we do not adopt natural gradients2 and the optimization involves a mixture of discrete and continuous variables (i.e., m and p), which is known hard to solve [20]. To address this problem, we propose to utilize a discrete distribution to model m along with a continuous one to model p, leading to a novel algorithm for optimization.
+In particular, instead of minimizing F(m, p; c), we minimize the expected loss under the search distribution as
+
+min
+θm ,θp
+
+J
+
+(θm,
+
+θp)
+
+=
+
+Eπ(m,p|θm,θp)[F (m,
+
+p;
+
+c)],
+
+(3)
+
+where π(m, p|θm, θp) is a distribution with parameters θm
+
+and θp. To deﬁne a proper distribution π over m ∈ {0, 1}d
+
+and
+
+p
+
+∈
+
+[0, 1]d,
+
+we
+
+let
+
+g(·)
+
+=
+
+1 2
+
+(tanh(·)
+
++
+
+1)
+
+denote
+
+a
+
+nor-
+
+malization function and take the transformation of variable
+
+approach as
+
+m ∼ Bern(g(θm)); p = g(p ), p ∼ N (θp, σ2), (4)
+
+where θm, θp ∈ Rd, Bern(·) is the Bernoulli distribution, and N (·, ·) is the Gaussian distribution with σ being its standard deviation. By adopting the formulation in Eq. (4), the constraints on m and p are satisﬁed while the optimization variables θm and θp are unconstrained. Therefore, we do not need to relax m to be continuous in [0, 1]d as the previous methods [19, 43] do and can perform optimization in the discrete domain. The experiments also reveal different behaviors between our method and baselines.
+To solve the optimization problem (3), we need to estimate its gradients. Note that m and p are independent, thus we can represent their joint distribution π(m, p|θm, θp) by π1(m|θm)π2(p|θp), in which π1(m|θm) denotes the Bernoulli distribution of m and π2(p|θp) denotes the transformation of Gaussian of p, as deﬁned in Eq. (4). Hence, we can estimate the gradients of J (θm, θp) with respect to θm
+2We explain why we do not adopt natural gradients in Appendix A.
+
+Algorithm 1 Black-box backdoor detection (B3D)
+
+Input: A set of clean images X; a target class c; the loss function
+
+in Eq. (2) denoted as F(m, p; c); the search distribution π de-
+
+ﬁned in Eq. (4); standard deviation of Gaussian σ; the number
+
+of samples k; the number of iterations T .
+
+Output: The parameters θm and θp of the search distribution π.
+
+1: Initialize θm and θp;
+
+2: for t = 1 to T do
+
+3: gˆm ← 0, gˆp ← 0;
+
+4: Randomly draw a minibatch Xt from X;
+
+5: for j = 1 to k do
+
+Estimate the gradient for θm
+
+6:
+
+Draw mj ∼ Bern(g(θm));
+
+7:
+
+gˆm ← gˆm + F (mj , g(θp); c) · 2(mj − g(θm));
+
+8: end for
+
+9: for j = 1 to k do
+
+Estimate the gradient for θp
+
+10:
+
+Draw j ∼ N (0, I);
+
+11:
+
+gˆp ← gˆp + F (g(θm), g(θp + σ j ); c) · j ;
+
+12: end for
+
+13:
+
+Update
+
+θm
+
+by
+
+θm
+
+←
+
+Adam.step(θm,
+
+1 k
+
+gˆm);
+
+14:
+
+Update
+
+θp
+
+by
+
+θp
+
+←
+
+Adam.step(θp,
+
+1 kσ
+
+gˆp);
+
+15: end for
+
+and θp separately. To calculate ∇θm J (θm, θp), we denote F1(m) = Eπ2(p|θp)[F (m, p; c)]. Then we have
+
+∇θm J (θm, θp) = ∇θm Eπ(m,p|θm,θp)[F (m, p; c)] = ∇θm Eπ1(m|θm)[F1(m)] = Eπ1(m|θm)[F1(m)∇θm log π1(m|θm)] = Eπ1(m|θm) F1(m) · 2(m − g(θm)) .
+
+In practice, we can obtain the estimate of the search gradient
+by approximating the expectation over m with k samples m1, ..., mk ∼ π1(m|θm). There is also an expectation in F1(m). We approximate it as F1(m) ≈ F (m, g(θp); c). Therefore, the gradient ∇θm J (θm, θp) can be obtained by
+
+1k
+
+∇θm J (θm, θp) ≈ k F1(mj )·2(mj − g(θm))
+
+j=1
+
+(5)
+
+1k
+
+≈ k
+
+F (mj, g(θp); c)·2(mj − g(θm)).
+
+j=1
+
+As can be seen from Eq. (5), the gradient can be estimated
+
+by evaluating the loss function with random samples, which
+
+can be realized under the black-box setting through queries. Similarly, we calculate the gradient ∇θp J (θm, θp) as
+
+∇θp J (θm, θp) = ∇θp Eπ2(p|θp)[F2(p)] = E ∼N (0,I) F2(g(θp + σ )) · σ ,
+
+where F2(p) = Eπ1(m|θm)[F (m, p; c)]. We reparameterize p by p = g(p ) = g(θp + σ ), where follows the standard Gaussian distribution N (0, I) to make the expres-
+sion clearer. We approximate F2(p) by F (g(θm), p; c) and
+
+4
+
+obtain the estimate of the gradient ∇θp J (θm, θp) with another k samples 1, ..., k ∼ N (0, I) as
+
+1k
+
+∇θp J (θm, θp) ≈ kσ
+
+F2(g(θp + σ j )) · j
+
+j=1
+
+(6)
+
+1k
+
+≈ kσ
+
+F (g(θm), g(θp + σ j ); c) · j .
+
+j=1
+
+After obtaining the estimated gradients, we can perform gradient descent to iteratively update the search distribution parameters θm and θp. We adopt the same strategy as NC, that the Adam optimizer is used and the hyperparameter λ in Eq. (2) is adaptively tuned. We outline the proposed B3D algorithm in Algorithm 1. In Step 4, we draw a minibatch Xt from the set of clean images X and evaluate the loss function F based on Xt. Similar to NC, after we get the reversed triggers for every class c, we identify outliers based on the L1 norm of the masks, and thereafter detect the backdoored model if any mask exhibits much smaller L1 norm. The details of our adopted outlier detection method will be introduced in the experiments.
+
+3.4. B3D with Synthetic Samples (B3D-SS)
+
+One limitation of the B3D algorithm as well as the previous methods [19, 43] is the dependence on a set of clean images, which could be unavailable in practice. To perform backdoor detection in the absence of any clean data, a simple approach is to adopt a set of synthetic samples. A good set of synthetic samples should satisfy that they are misclassiﬁed as the target class by adding the true trigger such that the true trigger is a solution of Eq. (2) and there should not exist many solutions of Eq. (2) such that we can recover the true trigger instead of obtaining other incorrect ones.
+In practice, the synthetic samples could be drawn from a random distribution or created by generative models based on different datasets. Besides, we need to make these samples well-distributed over all classes when classiﬁed by the model f (x) because in an extreme case that they are mostly classiﬁed as one class c, our algorithm would always generate a very small trigger for class c based on the problem formulation (2) no matter whether c is the target class or not. To this end, we draw n random images Xc := {xci }ni=1 for each class c and minimize (c, f (xci )) with respect to each image xci , in which (·, ·) is the cross-entropy loss. Therefore, the resultant synthetic image xci will be classiﬁed as c by f (x). Under the black-box setting, we use a gradientfree algorithm similar to Eq. (6) to optimize xci as
+
+xci
+
+←
+
+xci
+
+−
+
+η
+
+·
+
+1 kσ
+
+k
+
+(c, f (xci + δj)) · δj,
+
+(7)
+
+j=1
+
+where η is the learning rate and δ1, ..., δk are drawn from N (0, I). The synthetic dataset is composed of the resultant
+
+NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours)
+
+CIFAR-10
+95.0% 95.5% 97.5% 97.5%
+
+GTSRB
+100.0% 100.0% 100.0% 100.0%
+
+ImageNet
+96.0% 95.0% 96.0% 95.5%
+
+Table 2: The backdoor detection accuracy of NC, TABOR, B3D, and B3DSS on the CIFAR-10, GTSRB, and ImageNet datasets.
+
+images for all classes as X =
+
+C c=1
+
+Xc,
+
+which
+
+is
+
+further
+
+used for reverse-engineering the trigger by Algorithm 1.
+
+4. Experiments
+Datasets. We use CIFAR-10 [27], German Trafﬁc Sign Recognition Benchmark (GTSRB) [39], and ImageNet [36] datasets to conduct experiments. On each dataset, we train hundreds of models to perform comprehensive evaluations. Some of them are normally trained while the others have been embedded backdoors. We will detail the training and backdoor attack settings in Sec. 4.1 for CIFAR-10, Sec. 4.2 for GTSRB, and Sec. 4.3 for ImageNet. Sec. 4.4 shows the effectiveness of our methods under various settings.
+Compared methods. We compare B3D and B3D-SS with Neural Cleanse (NC) [43] and TABOR [19], which are typical and state-of-the-art methods based on model gradients. In B3D and B3D-SS, we set the number of samples k as 50, the standard deviation of Gaussian σ as 0.1, the learning rate of the Adam optimizer as 0.05. We provide the implementation details and more analyses on the hyperparameters in Appendix B. The optimization is conducted until convergence. After obtaining the distribution parameters θm and θp, we could generate the mask by discretization as m = 1[g(θm) ≥ 0.5] and the pattern as p = g(θp). To compare with the baselines, we adopt the “soft” mask g(θm) in experiments. TABOR introduces several regularizations to improve the performance of backdoor detection. Although our algorithm is based on the problem formulation (2) similar to NC, it can easily be extended to others (e.g., TABOR), which we leave to future work.
+Outlier detection. Given the reversed triggers for all classes, we calculate their L1 norm and perform outlier detection to identify very small triggers (i.e., outliers). We observe that the Median Absolute Deviation (MAD) adopted in NC performs poorly in some cases due to the assumption of a Gaussian distribution, which does not hold for all cases, especially when the number of classes C is small. Hence, we further add a heuristic rule to identify small triggers by judging whether the L1 norm of any mask is smaller than one fourth of their median. This method is also applied to NC to improve the baseline performance.
+Evaluations. Table 2 shows the overall backdoor detection accuracy of all methods on three datasets. Our methods achieve comparable or even better performance than the baselines, while rely on weak assumptions (i.e., black-box
+
+5
+
+Model
+Normal
+Backdoored (1 × 1 trigger)
+Backdoored (2 × 2 trigger)
+Backdoored (3 × 3 trigger)
+
+Accuracy 89.30% 88.35% 88.51% 88.57%
+
+ASR N/A 99.75% 100.00% 100.00%
+
+Method
+NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours)
+
+Reversed Trigger L1 norm ASR
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+0.588 98.76%
+
+0.672 99.11%
+
+0.820 3.734
+
+99.29% 99.98%
+
+1.508 98.81%
+
+2.256 99.21%
+
+2.310 2.867
+
+98.94% 99.13%
+
+2.264 98.71%
+
+2.493 98.84%
+
+3.521 3.856
+
+98.87% 96.97%
+
+Case I
+N/A N/A N/A N/A 40/50 36/50 36/50 35/50 47/50 44/50 47/50 47/50 49/50 48/50 47/50 47/50
+
+Detection Results Case II Case III
+
+N/A
+
+8/50
+
+N/A
+
+4/50
+
+N/A
+
+2/50
+
+N/A
+
+3/50
+
+9/50
+
+0/50
+
+13/50 0/50
+
+12/50 0/50
+
+15/50 0/50
+
+2/50
+
+0/50
+
+3/50
+
+0/50
+
+3/50
+
+0/50
+
+2/50
+
+0/50
+
+1/50
+
+0/50
+
+1/50
+
+0/50
+
+2/50
+
+0/50
+
+2/50
+
+0/50
+
+Case IV
+42/50 46/50 48/50 47/50 1/50 1/50 2/50 0/50 1/50 3/50 0/50 1/50 0/50 1/50 1/50 1/50
+
+Table 3: The results of backdoor detection on CIFAR-10. For normal and backdoored models with different trigger sizes, we show their average accuracy and backdoor attack success rates (ASR). For the four backdoor detection methods — NC, TABOR, B3D, and B3D-SS, we report the L1 norm and attack success rates of the reversed trigger corresponding to the target class, as well as the detection results in four cases.
+
+setting) for backdoor detection, validating the effectiveness of our methods. In addition to the coarse results, we further conduct sophisticated analyses of the performance of different methods on each dataset. Speciﬁcally, we consider four cases of backdoor detection for an algorithm A:
+• Case I: A successfully identiﬁes a backdoored model and correctly discovers the true target class without reporting other backdoor attacks for uninfected classes.
+• Case II: A successfully identiﬁes a backdoored model but discovers multiple backdoor attacks for both the true target class and other uninfected classes.
+• Case III: A wrongly identiﬁes a normal model as backdoored or wrongly discovers backdoor attacks for uninfected classes excluding the true target class of a backdoored model.
+• Case IV: A successfully identiﬁes a normal model or wrongly identiﬁes a backdoored model as normal.
+In the following, we introduce the detailed experimental results on each dataset.
+4.1. CIFAR-10
+We adopt the ResNet-18 [22] architecture on CIFAR-10. The backdoor attacks are implemented using the BadNets approach [18]. We consider the triggers of size 1 × 1, 2 × 2, and 3 × 3. For each size, we train 50 backdoored models using different triggers and target classes with 5 models per target class. The triggers are generated in random positions and have random colors. We poison 10% training data. Besides, we also train 50 normal models with different random seeds, resulting in a total number of 200 models. We train them for 200 epochs without using data augmentation. The accuracy on the clean test set and the backdoor attack success rates (ASR) are shown in Table 3 (column 2-3).
+
+1 ⇥ 1 trigger
+
+2 ⇥ 2 trigger
+
+3 ⇥ 3 trigger
+
+Original
+
+NC
+
+B3D
+
+B3D-SS
+
+Mask Mask*Pattern Mask Mask*Pattern Mask Mask*Pattern
+Figure 2: Visualization of the original triggers and the reversed triggers optimized by NC, B3D, and B3D-SS on CIFAR-10.
+To perform backdoor detection, NC, TABOR, and B3D adopt the 10, 000 clean test images, while B3D-SS adopts 1, 000 synthetic images with 100 per class. In Table 3, we report the L1 norm and the attack success rates (ASR) of the reversed trigger corresponding to the true target class for the backdoored models. We also report the number of models belonging to the four cases of backdoor detection. In Fig. 2, we visualize the original triggers and the reversed triggers optimized by NC, B3D, and B3D-SS with different trigger sizes. From the results, we draw the ﬁndings below.
+First, the reversed triggers of NC have smaller L1 norm than B3D and B3D-SS. It is reasonable since NC performs direct optimization using gradients. However, as NC relaxes the mask m to be continuous in [0, 1]d, the optimized masks shown in Fig. 2 tend to have small amplitudes. For B3D and B3D-SS, since we let m follow the Bernoulli distribution, the optimized masks have values closer to 0 (black) or 1 (white), which is in accordance with the formulation (1).
+
+6
+
+Model
+Normal
+Backdoored (1 × 1 trigger)
+Backdoored (2 × 2 trigger)
+Backdoored (3 × 3 trigger)
+
+Accuracy 98.84% 98.74% 98.79% 98.79%
+
+ASR N/A 99.53% 100.00% 100.00%
+
+Method
+NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours)
+
+Reversed Trigger L1 norm ASR
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+0.737 98.90%
+
+0.543 99.24%
+
+0.922 3.079
+
+98.86% 100.00%
+
+1.439 98.75%
+
+1.783 99.15%
+
+2.260 2.351
+
+99.04% 97.96%
+
+2.264 98.71%
+
+2.764 99.22%
+
+3.758 3.048
+
+98.87% 94.87%
+
+Case I
+N/A N/A N/A N/A 14/43 19/43 10/43 12/43 27/43 22/43 27/43 25/43 39/43 35/43 34/43 33/43
+
+Detection Results Case II Case III
+
+N/A
+
+0/43
+
+N/A
+
+0/43
+
+N/A
+
+0/43
+
+N/A
+
+0/43
+
+29/43 0/43
+
+24/43 0/43
+
+33/43 0/43
+
+31/43 0/43
+
+16/43 0/43
+
+21/43 0/43
+
+16/43 0/43
+
+18/43 0/43
+
+4/43
+
+0/43
+
+8/43
+
+0/43
+
+9/43
+
+0/43
+
+10/43 0/43
+
+Case IV
+43/43 43/43 43/43 43/43 0/43 0/43 0/43 0/43 0/43 0/43 0/43 0/43 0/43 0/43 0/43 0/43
+
+Table 4: The results of backdoor detection on GTSRB. For normal and backdoored models with different trigger sizes, we show their average accuracy and backdoor attack success rates (ASR). For the four backdoor detection methods — NC, TABOR, B3D, and B3D-SS, we report the L1 norm and attack success rates of the reversed trigger corresponding to the target class, as well as the detection results in four cases.
+
+Class: 0 Class: 1 Class: 2 Class: 3 Class: 4
+Class: 5 Class: 6 Class: 7 Class: 8 Class: 9 Figure 3: Visualization of the reversed triggers optimized by B3D for all classes on CIFAR-10. The true target class is 0, but B3D reports two backdoor attacks corresponding to class 0 and 9.
+Second, as can be seen from Table 3, NC wrongly identiﬁes more normal models as backdoored (i.e., 8 out of 50) than B3D and B3D-SS. It is also because that NC relaxes the mask m to [0, 1]d. Thus NC sometimes optimizes a mask with small L1 norm for an uninfected class, which does not resemble true backdoor patterns and is identiﬁed as an outlier by MAD. But B3D and B3D-SS perform optimization in the discrete domain, which are less prone to this problem. We will further discuss this phenomenon in Appendix C.
+Third, we ﬁnd that many backdoored models, especially those with 1 × 1 triggers, can be found multiple backdoors (i.e., Case II), as shown in Table 3. We verify that a chosen backdoored model truly has two backdoors in Fig. 3. So we think that backdoor attacks through data poisoning can not only affect the behavior of the model corresponding to the true target class, but also interfere other uninfected classes.
+Fourth, as shown in Fig. 2, the reversed triggers can have different positions and patterns compared with the original triggers. It indicates that a backdoored model would learn a distribution of triggers by generalizing the original one [34]. We provide further analysis on the effective input positions of backdoor attacks in Appendix D.
+
+4.2. GTSRB
+We adopt the same model architecture (i.e., ResNet-18) and backdoor injection method (i.e., BadNets) as in CIFAR10. Since GTSRB has 43 classes, we train one backdoored model for each class, resulting in 43 backdoored models for a speciﬁc trigger size. We train another 43 normal models for comparison. These models are trained for 50 epochs. For backdoor inspection, NC, TABOR, and B3D adopt the 12, 630 clean test images for optimization, while B3D-SS generates 4, 300 synthetic images with 100 per class.
+The detailed experimental results on the statistics of the reversed triggers and the backdoor detection accuracy are presented in Table 4. The observations are consistent with those on CIFAR-10. We also ﬁnd that the backdoor detection accuracy achieves 100%. We think that the perfect detection accuracy is partially a consequence of more classes in this dataset, which enables the outlier detection method to correctly ﬁnd outliers with more data points.
+4.3. ImageNet
+Since the original ImageNet dataset contains more than 14 million images, it is hard to train hundreds of models on it. Hence, we use a subset of 10 classes, where each class has ∼ 1, 300 images. The test set is composed of 500 images with 50 per class. These images have the resolution of 224 × 224. We also adopt the ResNet-18 model. For backdoor attacks, we consider three pre-deﬁned patterns shown in Table 5 of size 15 × 15 as the triggers rather than the randomly generated triggers. Similar to the experimental settings on CIFAR-10, we train 50 backdoored models using each trigger, in which 5 models per target class are trained with the trigger stamped at random positions. For backdoor detection, NC, TABOR, and B3D adopt the 500 test images, while B3D-SS utilizes 1, 000 synthetic images generated by
+
+7
+
+Model
+Normal
+Backdoored (Trigger )
+Backdoored (Trigger )
+Backdoored (Trigger )
+
+Accuracy 88.46% 87.91% 87.52% 87.39%
+
+ASR N/A 99.95% 99.68% 99.94%
+
+Method
+NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours)
+
+Reversed Trigger L1 norm ASR
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+62.093 99.11%
+
+57.569 99.25%
+
+86.083 99.14% 120.822 97.57%
+
+20.610 99.12%
+
+22.035 99/24%
+
+23.497 99.09% 24.124 97.15%
+
+38.701 99.14%
+
+37.499 99.20%
+
+56.636 99.13% 37.253 97.44%
+
+Case I
+N/A N/A N/A N/A 45/50 43/50 43/50 42/50 50/50 47/50 50/50 44/50 48/50 46/50 48/50 49/50
+
+Detection Results Case II Case III
+
+N/A
+
+2/50
+
+N/A
+
+1/50
+
+N/A
+
+0/50
+
+N/A
+
+1/50
+
+0/50
+
+0/50
+
+0/50
+
+0/50
+
+0/50
+
+0/50
+
+0/50
+
+0/50
+
+0/50
+
+0/50
+
+2/50
+
+0/50
+
+0/50
+
+0/50
+
+6/50
+
+0/50
+
+1/50
+
+0/50
+
+3/50
+
+0/50
+
+1/50
+
+0/50
+
+1/50
+
+0/50
+
+Case IV
+48/50 49/50 50/50 49/50 5/50 7/50 7/50 8/50 0/50 1/50 0/50 0/50 1/50 1/50 1/50 0/50
+
+Table 5: The results of backdoor detection on ImageNet. For normal and backdoored models with different triggers, we show their average accuracy and backdoor attack success rates (ASR). For the dour backdoor detection methods — NC, TABOR, B3D, and B3D-SS, we report the L1 norm and attack success rates of the reversed trigger corresponding to the target class, as well as the detection results in four cases.
+
+BigGAN [3], due to the poor performance of using random noises in the high-dimensional image space of ImageNet.
+We show the backdoor detection results on ImageNet in Table 5. Similar to the results on CIFAR-10 and GTSRB, our proposed B3D and B3D-SS methods can achieve comparable performance with the baselines. The reversed triggers also exhibit different visual appearance compared with the original triggers, as shown in Appendix E.
+4.4. Ablation Study on More Settings
+Besides the above experiments, we further demonstrate the generalizability of the proposed methods B3D and B3DSS by considering more settings, including:
+• Other backdoor attacks. We study the blended injection attack [9] and label-consistent attack [42] to insert backdoors besides BadNets.
+• Different model architectures. We study a VGG [38] model architecture besides the ResNet model.
+• Data augmentation. We investigate the effects of data augmentation for backdoor attacks and detection.
+• Multiple infected classes with different triggers. We consider the scenario that multiple backdoors with different target classes are embedded in a model.
+• Single infected class with multiple triggers. We consider the scenario that multiple backdoors with a single target class are embedded in a model.
+Due to the space limitation, the complete experiments on these settings are deferred to Appendix F.
+5. Mitigation of Backdoor Attacks
+Once a backdoor attack has been detected, we can further mitigate the backdoor to preserve the model utility for users. Under the studied black-box setting, we are unable to
+
+STRIP [15] Kernel Density [24] NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours)
+
+CIFAR-10
+0.9332 0.9585 0.9948 0.9937 0.9958 0.9856
+
+GTSRB
+0.4937 0.9874 0.9962 0.9953 0.9946 0.9924
+
+ImageNet
+0.7126 0.9328 0.9812 0.9842 0.9806 0.9833
+
+Table 6: The AUC-scores of detecting triggered inputs during inference on the CIFAR-10, GTSRB, and ImageNet datasets. We use the metric S(x) in Eq. (8) with the reversed triggers given by NC, TABOR, B3D, and B3DSS, respectively. The performance is compared with additional baselines, including STRIP [15] and the kernel density method [24].
+
+modify the model weights, such that the typical re-training
+or ﬁne-tuning [30, 41, 43] strategies cannot be utilized. In
+this section, we introduce a simple and effective strategy for
+reliable predictions by rejecting any adversary-crafted input
+with the backdoor trigger stamped during inference. Assume that we have detected a backdoored model f (x)
+and discovered the true target class yt. The optimized trigger for the target class is denoted as (m, p). The basic intuition behind our method is as follows. For a clean input xc and a triggered input xa crafted by the adversary, the predictions of xc and A(xc, m, p) by applying the reversed trigger are extremely different, while the predictions of xa and A(xa, m, p) are similar. The rationale is that both xa and A(xa, m, p) have the trigger stamped and are classiﬁed as the target class yt with similar probability distributions.
+Therefore, for an arbitrary input x, we let
+
+S(x) = DKL f (x)||f (A(x, m, p))
+
+(8)
+
+measure the similarity between the model predictions f (x) and f (A(x, m, p)), where DKL is the Kullback-Leibler divergence. If S(x) is large, x is probably a clean input, and
+otherwise x has the trigger stamped, which will be rejected without a prediction. Based on the metric S(x), we perform
+
+8
+
+binary classiﬁcation of clean inputs and triggered inputs on each dataset’s test set. We report the AUC-scores averaged over all backdoored models in Table 6. Using the reversed triggers optimized by any method, the proposed strategy can reliably detect the triggered inputs, achieving better performance than alternative baselines [15, 24].
+6. Conclusion
+In this paper, we proposed a black-box backdoor detection (B3D) method to identify backdoored models under the black-box setting. By formulating backdoor detection as an optimization problem, B3D solves the problem with model queries only. B3D can also be utilized with synthetic samples. We further introduced a simple and effective strategy to mitigate the discovered backdoor for reliable predictions. We conducted extensive experiments on several datasets to demonstrate the effectiveness of the proposed methods. Our methods reach comparable or even better performance than the previous methods based on stronger assumptions.
+References
+[1] Eugene Bagdasaryan, Andreas Veit, Yiqing Hua, Deborah Estrin, and Vitaly Shmatikov. How to backdoor federated learning. In International Conference on Artiﬁcial Intelligence and Statistics, pages 2938–2948, 2020. 2
+[2] Battista Biggio and Fabio Roli. Wild patterns: Ten years after the rise of adversarial machine learning. Pattern Recognition, 84:317–331, 2018. 1
+[3] Andrew Brock, Jeff Donahue, and Karen Simonyan. Large scale gan training for high ﬁdelity natural image synthesis. In International Conference on Learning Representations (ICLR), 2019. 8
+[4] Nicholas Carlini and David Wagner. Towards evaluating the robustness of neural networks. In IEEE Symposium on Security and Privacy (SP), pages 39–57, 2017. 1
+[5] Anirban Chakraborty, Manaar Alam, Vishal Dey, Anupam Chattopadhyay, and Debdeep Mukhopadhyay. Adversarial attacks and defences: A survey. arXiv preprint arXiv:1810.00069, 2018. 1
+[6] Alvin Chan and Yew-Soon Ong. Poison as a cure: Detecting & neutralizing variable-sized backdoor attacks in deep neural networks. arXiv preprint arXiv:1911.08040, 2019. 2
+[7] Bryant Chen, Wilka Carvalho, Nathalie Baracaldo, Heiko Ludwig, Benjamin Edwards, Taesung Lee, Ian Molloy, and Biplav Srivastava. Detecting backdoor attacks on deep neural networks by activation clustering. arXiv preprint arXiv:1811.03728, 2018. 2, 3
+[8] Huili Chen, Cheng Fu, Jishen Zhao, and Farinaz Koushanfar. Deepinspect: A black-box trojan detection and mitigation framework for deep neural networks. In Proceedings of the Twenty-Eighth International Joint Conference on Artiﬁcial Intelligence (IJCAI), pages 4658–4664, 2019. 2, 3
+[9] Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep learning systems
+
+using data poisoning. arXiv preprint arXiv:1712.05526, 2017. 1, 2, 8, 13
+[10] Edward Chou, Florian Tramer, and Giancarlo Pellegrino. Sentinet: Detecting localized universal attack against deep learning systems. IEEE Symposium on Security and Privacy Workshops (SPW), 2020. 2
+[11] B Gia Doan, Ehsan Abbasnejad, and Damith C Ranasinghe. Februus: Input puriﬁcation defense against trojan attacks on deep neural network systems. arXiv preprint arXiv:1908.03369, 2019. 2
+[12] Yinpeng Dong, Fangzhou Liao, Tianyu Pang, Hang Su, Jun Zhu, Xiaolin Hu, and Jianguo Li. Boosting adversarial attacks with momentum. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), pages 9185–9193, 2018. 1
+[13] Min Du, Ruoxi Jia, and Dawn Song. Robust anomaly detection and backdoor attack detection via differential privacy. In International Conference on Learning Representations (ICLR), 2020. 2
+[14] Jacob Dumford and Walter Scheirer. Backdooring convolutional neural networks via targeted weight perturbations. arXiv preprint arXiv:1812.03128, 2018. 2
+[15] Yansong Gao, Change Xu, Derui Wang, Shiping Chen, Damith C Ranasinghe, and Surya Nepal. Strip: A defence against trojan attacks on deep neural networks. In Proceedings of the 35th Annual Computer Security Applications Conference (ACSAC), pages 113–125, 2019. 2, 8, 9
+[16] Ian Goodfellow, Yoshua Bengio, and Aaron Courville. Deep Learning. MIT Press, 2016. http://www. deeplearningbook.org. 1
+[17] Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial examples. In International Conference on Learning Representations (ICLR), 2015. 1
+[18] Tianyu Gu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Identifying vulnerabilities in the machine learning model supply chain. arXiv preprint arXiv:1708.06733, 2017. 1, 2, 3, 6
+[19] Wenbo Guo, Lun Wang, Xinyu Xing, Min Du, and Dawn Song. Tabor: A highly accurate approach to inspecting and restoring trojan backdoors in ai systems. arXiv preprint arXiv:1908.01763, 2019. 2, 3, 4, 5, 6, 7, 8, 11, 13
+[20] Momchil Halstrup. Black-box optimization of mixed discrete-continuous optimization problems. PhD thesis, TU Dortmund University, 2016. 4
+[21] Haripriya Harikumar, Vuong Le, Santu Rana, Sourangshu Bhattacharya, Sunil Gupta, and Svetha Venkatesh. Scalable backdoor detection in neural networks. arXiv preprint arXiv:2006.05646, 2020. 2, 3
+[22] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), pages 770–778, 2016. 6
+[23] Xijie Huang, Moustafa Alzantot, and Mani Srivastava. Neuroninspect: Detecting backdoors in neural networks via output explanations. arXiv preprint arXiv:1911.07399, 2019. 2
+
+9
+
+[24] Kaidi Jin, Tianwei Zhang, Chao Shen, Yufei Chen, Ming Fan, Chenhao Lin, and Ting Liu. A uniﬁed framework for analyzing and detecting malicious examples of dnn models. arXiv preprint arXiv:2006.14871, 2020. 8, 9
+[25] Diederik Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In International Conference on Learning Representations (ICLR), 2015. 3
+[26] Soheil Kolouri, Aniruddha Saha, Hamed Pirsiavash, and Heiko Hoffmann. Universal litmus patterns: Revealing backdoor attacks in cnns. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 301–310, 2020. 2, 3
+[27] Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. Technical report, University of Toronto, 2009. 5
+[28] Ram Shankar Siva Kumar, Magnus Nystro¨m, John Lambert, Andrew Marshall, Mario Goertzel, Andi Comissoneru, Matt Swann, and Sharon Xia. Adversarial machine learning– industry perspectives. arXiv preprint arXiv:2002.05646, 2020. 1
+[29] Yiming Li, Baoyuan Wu, Yong Jiang, Zhifeng Li, and ShuTao Xia. Backdoor learning: A survey. arXiv preprint arXiv:2007.08745, 2020. 3
+[30] Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. Finepruning: Defending against backdooring attacks on deep neural networks. In International Symposium on Research in Attacks, Intrusions, and Defenses, pages 273–294. Springer, 2018. 2, 8
+[31] Yingqi Liu, Shiqing Ma, Yousra Aafer, Wen-Chuan Lee, Juan Zhai, Weihang Wang, and Xiangyu Zhang. Trojaning attack on neural networks. In Proceedings of the 25th Network and Distributed System Security Symposium (NDSS), 2018. 1, 2
+[32] Yunfei Liu, Xingjun Ma, James Bailey, and Feng Lu. Reﬂection backdoor: A natural backdoor attack on deep neural networks. In European Conference on Computer Vision (ECCV), 2020. 2
+[33] Yuntao Liu, Yang Xie, and Ankur Srivastava. Neural trojans. In IEEE International Conference on Computer Design (ICCD), pages 45–48. IEEE, 2017. 2
+[34] Ximing Qiao, Yukun Yang, and Hai Li. Defending neural backdoors via generative distribution modeling. In Advances in Neural Information Processing Systems (NeurIPS), pages 14004–14013, 2019. 2, 3, 7
+[35] Adnan Siraj Rakin, Zhezhi He, and Deliang Fan. Tbt: Targeted neural network attack with bit trojan. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pages 13198–13207, 2020. 2
+[36] Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng Huang, Andrej Karpathy, Aditya Khosla, Michael Bernstein, et al. Imagenet large scale visual recognition challenge. International Journal of Computer Vision, 115(3):211–252, 2015. 5
+[37] Aniruddha Saha, Akshayvarun Subramanya, and Hamed Pirsiavash. Hidden trigger backdoor attacks. In Thirty-Fourth AAAI Conference on Artiﬁcial Intelligence (AAAI), 2020. 2
+
+[38] Karen Simonyan and Andrew Zisserman. Very deep convolutional networks for large-scale image recognition. In International Conference on Learning Representations (ICLR), 2015. 8, 13
+[39] Johannes Stallkamp, Marc Schlipsing, Jan Salmen, and Christian Igel. Man vs. computer: Benchmarking machine learning algorithms for trafﬁc sign recognition. Neural networks, 32:323–332, 2012. 5
+[40] Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Goodfellow, and Rob Fergus. Intriguing properties of neural networks. In International Conference on Learning Representations (ICLR), 2014. 1
+[41] Brandon Tran, Jerry Li, and Aleksander Madry. Spectral signatures in backdoor attacks. In Advances in Neural Information Processing Systems (NeurIPS), pages 8000–8010, 2018. 2, 3, 8
+[42] Alexander Turner, Dimitris Tsipras, and Aleksander Madry. Label-consistent backdoor attacks. arXiv preprint arXiv:1912.02771, 2019. 2, 8, 13
+[43] Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y Zhao. Neural cleanse: Identifying and mitigating backdoor attacks in neural networks. In IEEE Symposium on Security and Privacy (SP), pages 707–723. IEEE, 2019. 2, 3, 4, 5, 6, 7, 8, 11, 13
+[44] Daan Wierstra, Tom Schaul, Tobias Glasmachers, Yi Sun, Jan Peters, and Ju¨rgen Schmidhuber. Natural evolution strategies. Journal of Machine Learning Research, 15(27):949–980, 2014. 4, 11
+[45] Zhen Xiang, David J Miller, and George Kesidis. A benchmark study of backdoor data poisoning defenses for deep neural network classiﬁers and a novel defense. In 2019 IEEE 29th International Workshop on Machine Learning for Signal Processing (MLSP), pages 1–6. IEEE, 2019. 2
+[46] Yuanshun Yao, Huiying Li, Haitao Zheng, and Ben Y Zhao. Latent backdoor attacks on deep neural networks. In Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communications Security, pages 2041–2055, 2019. 2
+[47] Pu Zhao, Pin-Yu Chen, Payel Das, Karthikeyan Natesan Ramamurthy, and Xue Lin. Bridging mode connectivity in loss landscapes and adversarial robustness. In International Conference on Learning Representations (ICLR), 2020. 2
+[48] Shihao Zhao, Xingjun Ma, Xiang Zheng, James Bailey, Jingjing Chen, and Yu-Gang Jiang. Clean-label backdoor attacks on video recognition models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pages 14443–14452, 2020. 2
+
+10
+
+A. Natural Gradients
+
+Natural Evolution Strategies (NES) [44] adopt the natu-
+
+ral gradients for optimization, because [44] illustrates that
+
+the plain search gradients make the optimization very un-
+
+stable when sampling from a Gaussian distribution with the
+
+learnable mean and covariance matrix. The natural gradient
+
+is deﬁned as
+
+∇θJ = F−1∇θJ (θ),
+
+(9)
+
+where θ denotes the search distribution parameter and F is
+
+Fisher information matrix as
+
+F = Eπ(·|θ) ∇θ log π(·|θ)∇θ log π(·|θ) . (10)
+
+In our problem, we could also calculate the Fisher information matrices for the search distributions π1(m|θm) and π2(p|θp). For π1(m|θm), we have
+
+F = Eπ1(m|θm) ∇θm log π1(m|θm)∇θm log π1(m|θm) = Eπ1(m|θm) 4(m − g(θm))(m − g(θm)) = 4 · diag (g(θm)(1 − g(θm))) ,
+
+where diag(·) denotes the diagonal matrix. If the optimization on θm is nearly converged, g(θm) tends to be close to 0 or 1 since the mask m sampled from Bern(g(θm)) should not change dramatically with different tries. Therefore, the diagonal elements in F tend to be 0 and those of F−1 tend to be +∞. Consequently, the optimization would be rather unstable if we adopt natural gradients.
+For π2(p|θp), note that the variance of the Gaussian distribution is ﬁxed, and thus the Fisher information matrix becomes I. In this case, the natural gradients are the same
+as the plain gradients. Hence, we do not adopt natural gra-
+dients for optimization in our problem.
+
+B. Implementation Details and Hyperparameters
+
+The implementation of Neural Cleanse (NC) [43] is based on the ofﬁcial source code3. The source code of TABOR [19] was not released by the authors. Thus we implement TABOR based on another (unofﬁcial) implementation4. Our proposed B3D follows a similar optimization process to NC but replaces the white-box gradients by the estimated gradients, as detailed in Sec. 3.3. The hyperparameter λ in Eq. (2) is adjusted dynamically according to the backdoor attack success rate of several past optimization iterations, which is also based on the implementation of NC.
+In B3D and B3D-SS, we introduce one critical hyperparameter k (i.e., the number of samples to estimate the gradient), which can affect the performance of backdoor detection. If k is too small, the estimated gradient exhibits a large
+3https://github.com/bolunwang/backdoor. 4https://github.com/UsmannK/TABOR.
+
+variance, making the optimization rather unstable. Otherwise, if k is too large, the optimization needs more queries and time. Therefore, we need to choose a suitable k to have a relatively small variance and make the optimization efﬁcient. So we choose k = 50 in the main experiments and we ﬁnd that using k ∈ [20, 100] leads to similar results. The optimization process is not very sensitive to different k.
+In B3D-SS, we adopt a set of synthetic samples to perform optimization. The quality of the synthetic samples is also a critical factor to affect the performance of our algorithm. There are two important aspects — the number of synthetic samples and the generation method of synthetic samples. Intuitively speaking, more synthetic samples are beneﬁcial for reverse-engineering the true trigger since the optimization process would not easily drop into local minima. Empirically, we observe that using thousands of synthetic samples is sufﬁcient for optimization, and thus we do not try to use more. On the other hand, the generation method of synthetic samples depends on the datasets. For CIFAR-10 and GTSRB, we ﬁnd that using randomly generated samples from a uniform distribution can help to restore the true trigger. But for ImageNet, the randomly generated samples are not helpful since the input dimension is much higher. Therefore, we adopt synthetic samples generated by BigGAN to perform optimization. We leave the study on more choices of synthetic samples in future work.
+C. Analysis on NC and B3D for Normal Models
+In the experiments, we ﬁnd that NC wrongly identiﬁes more normal models as backdoored than B3D and B3D-SS, especially on CIFAR-10. We provide further analysis in this section.
+Fig. 4 shows an example of the wrong identiﬁcation of a normal model by NC trained on CIFAR-10. Because NC relaxes the masks to be continuous in [0, 1]d, it can be observed that the reversed mask by NC has small amplitude but covers a large region. In this example, class 1 is identiﬁed as an infected class since the L1 norm of the mask is smaller than others and is regarded as an outlier among the masks of all classes. However, this mask does not resemble the masks of true backdoor patterns. In B3D and B3D-SS, as we adopt the Bernoulli distribution to model the masks, the optimized masks tend to be close to 1. Thus B3D and B3D-SS are less probable to optimize a mask with much smaller L1 norm for a speciﬁc class. As a result, B3D and B3D-SS are less prone to this problem.
+D. Effective Positions of Backdoor Attacks
+Although we typically embed a backdoor in a model at a speciﬁc input position, the reversed trigger often locates at a different position from the original trigger. We deduce that the backdoored model would learn a distribution of triggers
+
+11
+
+NC
+
+B3D
+
+Class: 0 Class: 1 Class: 2 Class: 3 Class: 4 Class: 5 Class: 6 Class: 7 Class: 8 Class: 9
+L1 = 37.78 L1 = 20.48 L1 = 30.10 L1 = 36.31 L1 = 34.90 L1 = 34.67 L1 = 37.78 L1 = 44.82 L1 = 38.19 L1 = 31.11
+L1 = 43.08 L1 = 31.59 L1 = 40.94 L1 = 40.71 L1 = 47.13 L1 = 41.31 L1 = 43.91 L1 = 56.29 L1 = 51.42 L1 = 35.01
+L1 = 53.83 L1 = 27.77 L1 = 25.57 L1 = 34.40 L1 = 55.91 L1 = 42.79 L1 = 31.33 L1 = 61.66 L1 = 39.86 L1 = 38.13 Figure 4: Visualization of the reversed masks optimized by NC, B3D, and B3D-SS for all classes of a normal model on CIFAR-10. NC wrongly identiﬁes the model as backdoored and regards class 1 to be the infected class.
+Model 1 Model 2 Model 3 Model 4 Model 5
+
+B3D-SS
+
+Original
+
+Trigger
+
+NC
+
+ASR
+
+B3D
+
+Figure 5: The original triggers and the backdoor attack success rates (ASR) by applying the triggers to different positions in the input. In the second row, the value of the pixel represents the ASR at each position, i.e., a white pixel represents the 100% ASR while a black pixel represents the 0% ASR.
+
+B3D-SS
+
+Mask Mask*Pattern Mask Mask*Pattern Mask Mask*Pattern
+Figure 6: Visualization of the original triggers and the reversed triggers optimized by NC, B3D, and B3D-SS on ImageNet.
+
+by generalizing the original one. To validate it, we calculate the success rates of backdoor attacks by applying the trigger to all input positions.
+Speciﬁcally, we randomly choose 5 backdoored models on CIFAR-10 with 1 × 1 triggers. For each model, we insert the trigger into each position of the input and evaluate the attack success rates (ASR). We visualize the heat maps of ASR in Fig. 5. It can be seen that a lot of input positions besides the original one can induce high ASR. Thus we can conclude that the backdoored model can learn a distribution of backdoor triggers in various positions, and the backdoor detection method could converge to either one from the distribution, which does not necessarily locate at the same position as the original trigger.
+
+E. Visualization Results on ImageNet
+We visualize the original triggers and the reversed triggers optimized by NC, B3D, and B3D-SS on ImageNet in Fig. 6. It can be seen that the reversed triggers do not resemble the original triggers, indicating that the backdoored models would automatically learn distinctive features from the triggers rather than remembering the exact patterns.
+F. Experiments on More Settings
+In this section, we provide additional experiments by considering more various backdoor attacks and training settings. The results consistently demonstrate the effectiveness of our proposed methods — B3D and B3D-SS.
+
+12
+
+Attack Blended Injection Label-Consistent
+
+Accuracy 88.36% 86.70%
+
+ASR 100.00% 99.92%
+
+Method
+NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours)
+
+Reversed Trigger L1 norm ASR
+
+0.499 0.640 0.865 4.320
+
+98.77% 99.00% 98.99% 99.99%
+
+3.092 3.291 3.737 3.783
+
+98.72% 99.19% 98.92% 97.81%
+
+Case I
+40/50 37/50 36/50 40/50 47/50 46/50 46/50 47/50
+
+Detection Results Case II Case III
+10/50 0/50 11/50 0/50 14/50 0/50 10/50 0/50 0/50 0/50 1/50 0/50 1/50 0/50 3/50 0/50
+
+Case IV
+0/50 2/50 0/50 0/50 3/50 3/50 3/50 0/50
+
+Table 7: The results of backdoor detection on CIFAR-10 against the blended injection attack [9] and label-consistent attack [42]. We show the average accuracy and backdoor attack success rates (ASR) of the backdoored models. For the four backdoor detection methods — NC, TABOR, B3D, and B3D-SS, we report the L1 norm and attack success rates of the reversed trigger corresponding to the target class, as well as the detection results in four cases.
+
+Model
+Normal
+Backdoored (1 × 1 trigger)
+Backdoored (2 × 2 trigger)
+Backdoored (3 × 3 trigger)
+
+Accuracy 89.57% 88.79% 88.86% 88.70%
+
+ASR N/A 99.64% 99.99% 100.00%
+
+Method
+NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours) NC [43] TABOR [19] B3D (Ours) B3D-SS (Ours)
+
+Reversed Trigger L1 norm ASR
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+N/A
+
+0.980 98.67%
+
+1.014 99.12%
+
+1.085 98.81% 9.247 99.52%
+
+2.393 98.69%
+
+2.475 98.98%
+
+2.734 98.90% 6.836 99.18%
+
+3.448 98.60%
+
+3.192 99.09%
+
+3.839 98.89% 5.906 96.72%
+
+Case I
+N/A N/A N/A N/A 41/50 39/50 32/50 25/50 46/50 43/50 41/50 31/50 44/50 47/50 40/50 34/50
+
+Detection Results Case II Case III
+N/A 1/50 N/A 1/50 N/A 1/50 N/A 3/50 6/50 2/50 7/50 0/50 14/50 2/50 20/50 3/50 3/50 1/50 5/50 0/50 7/50 2/50 18/50 1/50 5/50 0/50 3/50 0/50 7/50 0/50 14/50 2/50
+
+Case IV
+49/50 49/50 49/50 47/50 1/50 4/50 2/50 2/50 0/50 2/50 0/50 0/50 1/50 0/50 3/50 0/50
+
+Table 8: The results of backdoor detection on CIFAR-10 with the VGG-16 model architecture. For normal and backdoored models with different trigger sizes, we show their average accuracy and backdoor attack success rates (ASR). For the four backdoor detection methods — NC, TABOR, B3D, and B3D-SS, we report the L1 norm and attack success rates of the reversed trigger corresponding to the target class, as well as the detection results in four cases.
+
+F.1. Other Backdoor Attacks
+Besides the BadNets approach used in the main paper, we consider more backdoor attacks including the blended injection attack [9] and the label-consistent attack [42]. The blended injection attack adds a 3 × 3 trigger into a random position of the image, and performs a weighted average of the original image and the trigger. The blend ratio is set as 0.2. The poison ratio is 10%. We train 50 models by the blended injection attack. The label-consistent attack does not alter the ground-truth label of the poisoned input. We adopt the adversarial manipulation approach to make the original context hard to learn, as proposed in [42]. The poison ratio is 8% of the whole dataset. We also train 50 models by the label-consistent attack.
+The results of NC, TABOR, B3D, and B3D-SS against
+
+the blended injection and label-consistent attacks are shown in Table 7. NC achieves 100% and 94% detection accuracy against the two attacks; TABOR achieves 96% and 94% detection accuracy; B3D achieves 100% and 94% detection accuracy; while B3D-SS achieves 100% detection accuracy against both attacks. The results validate the effectiveness of our proposed approaches against other backdoor attacks besides BadNets.
+F.2. Different Model Architectures
+Although we study backdoor attacks and detection using the ResNet-18 model in Sec. 4, our method can generally be applied when using other model architectures. To illustrate this, we further conduct experiments on CIFAR-10 with a VGG-16 [38] model. The experimental settings are
+
+13
+
+Original
+
+Trigger size
+1×1 2×2 3×3
+
+Accuracy
+94.68% 94.78% 95.29%
+
+ASR
+99.67% 99.99% 100.00%
+
+Table 9: The accuracy and the backdoor attack success rates (ASR) of three backdoored models on CIFAR-10 with data augmentation.
+
+1 ⇥ 1 trigger
+
+2 ⇥ 2 trigger
+
+3 ⇥ 3 trigger
+
+Class: 0
+
+Class: 1
+
+Original
+
+B3D
+
+Mask Mask*Pattern Mask Mask*Pattern
+Figure 9: Visualization of the original trigger and the reversed triggers optimized by B3D of a backdoored model on CIFAR-10 with two backdoors targeting at class 0 and 1.
+
+B3D
+
+Mask Mask*Pattern Mask Mask*Pattern Mask Mask*Pattern
+Figure 7: Visualization of the original triggers and the reversed triggers optimized by B3D of three backdoored models on CIFAR10 with data augmentation.
+Figure 8: The backdoor attack success rates (ASR) by applying the trigger to different positions in the input. We study the backdoored model using the 1 × 1 trigger on CIFAR-10 with data augmentation.
+the same as the experiments in Sec. 4.1 using the ResNet-18 model, in which we also train 200 models for evaluations.
+We present the detailed results in Table 8. Overall, the backdoor detection accuracy achieves 98.5% by NC, 96.5% by TABOR, 97.0% by B3D, and 97.5% by B3D-SS. The results on the VGG-16 model consistently demonstrate the effectiveness of the proposed methods B3D and B3D-SS, which achieve comparable performance with NC and TABOR.
+F.3. Data Augmentation
+The previous experiments do not adopt data augmentation during training. However, data augmentation is a common technique for training DNN models. To investigate the effects of data augmentation for backdoor attacks and detection, we provide further analysis in this section.
+We conduct experiments on CIFAR-10 with the ResNet18 model architecture. We train one backdoored model for each trigger size of 1×1, 2×2, and 3×3 with data augmentation (i.e., horizontal ﬂips and random crops from images with 4 pixels padded on each side). The accuracy and the backdoor attack success rates (ASR) of these models are shown in Table 9. With data augmentation, the backdoored
+
+models can achieve higher accuracy on clean test data while preserving near 100% ASR for backdoor attacks. We then use B3D to perform backdoor detection of these three models. B3D successfully identiﬁes these models as backdoored and correctly discovers the true target class. We visualize the original triggers and reversed triggers in Fig. 7.
+Moreover, we suspect that using data augmentation can make the effective input positions of backdoor attacks much more, because the poisoned training samples are also augmented such that the trigger will locate at many positions in the training data. Similar to the experiments in Appendix C, we use the backdoored model with the 1 × 1 trigger and show the heat map of ASR of this model in Fig. 8. It can be seen that the trigger is effective at a lot of positions.
+F.4. Multiple Infected Classes with Different Triggers
+We consider the scenario that multiple backdoors with different target classes are embedded in a model. We train a backdoored model on CIFAR-10 with two backdoors targeting at class 0 and 1, respectively. The B3D method successfully identiﬁes both backdoors, with the reversed triggers shown in Fig. 9.
+F.5. Single Infected Class with Multiple Triggers
+We consider the scenario that multiple backdoors with a single target class are embedded in a model. We train a backdoored model on CIFAR-10 with two triggers both targeting at class 0. B3D successfully identiﬁes the existence of backdoor attacks. However, we ﬁnd that B3D can only restore the trigger according to one backdoor but fail to recover the trigger tied to the other. We think this is because that one backdoor is easier to identify than the other when we perform optimization using an objective function. It also does not harm the effectiveness of B3D in pointing out the existence of backdoored models.
+
+14
+

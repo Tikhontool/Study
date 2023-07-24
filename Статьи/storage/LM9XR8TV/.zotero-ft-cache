@@ -1,0 +1,81 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2307.10487
+
+Help | Advanced Search
+Search
+Computer Science > Computer Vision and Pattern Recognition
+(cs)
+[Submitted on 19 Jul 2023]
+Title: Backdoor Attack against Object Detection with Clean Annotation
+Authors: Yize Cheng , Wenbin Hu , Minhao Cheng
+Download a PDF of the paper titled Backdoor Attack against Object Detection with Clean Annotation, by Yize Cheng and 2 other authors
+Download PDF
+
+    Abstract: Deep neural networks (DNNs) have shown unprecedented success in object detection tasks. However, it was also discovered that DNNs are vulnerable to multiple kinds of attacks, including Backdoor Attacks. Through the attack, the attacker manages to embed a hidden backdoor into the DNN such that the model behaves normally on benign data samples, but makes attacker-specified judgments given the occurrence of a predefined trigger. Although numerous backdoor attacks have been experimented on image classification, backdoor attacks on object detection tasks have not been properly investigated and explored. As object detection has been adopted as an important module in multiple security-sensitive applications such as autonomous driving, backdoor attacks on object detection could pose even more severe threats. Inspired by the inherent property of deep learning-based object detectors, we propose a simple yet effective backdoor attack method against object detection without modifying the ground truth annotations, specifically focusing on the object disappearance attack and object generation attack. Extensive experiments and ablation studies prove the effectiveness of our attack on two benchmark object detection datasets, PASCAL VOC07+12 and MSCOCO, on which we achieve an attack success rate of more than 92% with a poison rate of only 5%. 
+
+Subjects: 	Computer Vision and Pattern Recognition (cs.CV) ; Artificial Intelligence (cs.AI)
+Cite as: 	arXiv:2307.10487 [cs.CV]
+  	(or arXiv:2307.10487v1 [cs.CV] for this version)
+  	https://doi.org/10.48550/arXiv.2307.10487
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Yize Cheng [ view email ]
+[v1] Wed, 19 Jul 2023 22:46:35 UTC (6,550 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Backdoor Attack against Object Detection with Clean Annotation, by Yize Cheng and 2 other authors
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.CV
+< prev   |   next >
+new | recent | 2307
+Change to browse by:
+cs
+cs.AI
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

@@ -1,0 +1,82 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2307.05422
+
+Help | Advanced Search
+Search
+Computer Science > Cryptography and Security
+(cs)
+[Submitted on 11 Jul 2023]
+Title: Differential Analysis of Triggers and Benign Features for Black-Box DNN Backdoor Detection
+Authors: Hao Fu , Prashanth Krishnamurthy , Siddharth Garg , Farshad Khorrami
+Download a PDF of the paper titled Differential Analysis of Triggers and Benign Features for Black-Box DNN Backdoor Detection, by Hao Fu and 3 other authors
+Download PDF
+
+    Abstract: This paper proposes a data-efficient detection method for deep neural networks against backdoor attacks under a black-box scenario. The proposed approach is motivated by the intuition that features corresponding to triggers have a higher influence in determining the backdoored network output than any other benign features. To quantitatively measure the effects of triggers and benign features on determining the backdoored network output, we introduce five metrics. To calculate the five-metric values for a given input, we first generate several synthetic samples by injecting the input's partial contents into clean validation samples. Then, the five metrics are computed by using the output labels of the corresponding synthetic samples. One contribution of this work is the use of a tiny clean validation dataset. Having the computed five metrics, five novelty detectors are trained from the validation dataset. A meta novelty detector fuses the output of the five trained novelty detectors to generate a meta confidence score. During online testing, our method determines if online samples are poisoned or not via assessing their meta confidence scores output by the meta novelty detector. We show the efficacy of our methodology through a broad range of backdoor attacks, including ablation studies and comparison to existing approaches. Our methodology is promising since the proposed five metrics quantify the inherent differences between clean and poisoned samples. Additionally, our detection method can be incrementally improved by appending more metrics that may be proposed to address future advanced attacks. 
+
+Comments: 	Published in the IEEE Transactions on Information Forensics and Security
+Subjects: 	Cryptography and Security (cs.CR) ; Machine Learning (cs.LG)
+Cite as: 	arXiv:2307.05422 [cs.CR]
+  	(or arXiv:2307.05422v1 [cs.CR] for this version)
+  	https://doi.org/10.48550/arXiv.2307.05422
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Hao Fu [ view email ]
+[v1] Tue, 11 Jul 2023 16:39:43 UTC (2,436 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Differential Analysis of Triggers and Benign Features for Black-Box DNN Backdoor Detection, by Hao Fu and 3 other authors
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.CR
+< prev   |   next >
+new | recent | 2307
+Change to browse by:
+cs
+cs.LG
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

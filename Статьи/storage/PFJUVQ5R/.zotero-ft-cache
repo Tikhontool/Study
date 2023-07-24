@@ -1,0 +1,91 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2103.13127
+
+Help | Advanced Search
+Search
+Computer Science > Cryptography and Security
+(cs)
+[Submitted on 24 Mar 2021]
+Title: Black-box Detection of Backdoor Attacks with Limited Information and Data
+Authors: Yinpeng Dong , Xiao Yang , Zhijie Deng , Tianyu Pang , Zihao Xiao , Hang Su , Jun Zhu
+Download a PDF of the paper titled Black-box Detection of Backdoor Attacks with Limited Information and Data, by Yinpeng Dong and 6 other authors
+Download PDF
+
+    Abstract: Although deep neural networks (DNNs) have made rapid progress in recent years, they are vulnerable in adversarial environments. A malicious backdoor could be embedded in a model by poisoning the training dataset, whose intention is to make the infected model give wrong predictions during inference when the specific trigger appears. To mitigate the potential threats of backdoor attacks, various backdoor detection and defense methods have been proposed. However, the existing techniques usually require the poisoned training data or access to the white-box model, which is commonly unavailable in practice. In this paper, we propose a black-box backdoor detection (B3D) method to identify backdoor attacks with only query access to the model. We introduce a gradient-free optimization algorithm to reverse-engineer the potential trigger for each class, which helps to reveal the existence of backdoor attacks. In addition to backdoor detection, we also propose a simple strategy for reliable predictions using the identified backdoored models. Extensive experiments on hundreds of DNN models trained on several datasets corroborate the effectiveness of our method under the black-box setting against various backdoor attacks. 
+
+Subjects: 	Cryptography and Security (cs.CR) ; Computer Vision and Pattern Recognition (cs.CV); Machine Learning (cs.LG); Machine Learning (stat.ML)
+Cite as: 	arXiv:2103.13127 [cs.CR]
+  	(or arXiv:2103.13127v1 [cs.CR] for this version)
+  	https://doi.org/10.48550/arXiv.2103.13127
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Yinpeng Dong [ view email ]
+[v1] Wed, 24 Mar 2021 12:06:40 UTC (802 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Black-box Detection of Backdoor Attacks with Limited Information and Data, by Yinpeng Dong and 6 other authors
+    PDF
+    Other formats 
+
+Current browse context:
+cs.CR
+< prev   |   next >
+new | recent | 2103
+Change to browse by:
+cs
+cs.CV
+cs.LG
+stat
+stat.ML
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+DBLP - CS Bibliography
+listing | bibtex
+Yinpeng Dong
+Xiao Yang
+Zhijie Deng
+Tianyu Pang
+Zihao Xiao
+…
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

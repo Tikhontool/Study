@@ -1,0 +1,93 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2003.00865
+
+Help | Advanced Search
+Search
+Computer Science > Computer Vision and Pattern Recognition
+(cs)
+[Submitted on 25 Feb 2020 ( v1 ), last revised 11 Jan 2023 (this version, v4)]
+Title: Towards Backdoor Attacks and Defense in Robust Machine Learning Models
+Authors: Ezekiel Soremekun , Sakshi Udeshi , Sudipta Chattopadhyay
+Download a PDF of the paper titled Towards Backdoor Attacks and Defense in Robust Machine Learning Models, by Ezekiel Soremekun and 1 other authors
+Download PDF
+
+    Abstract: The introduction of robust optimisation has pushed the state-of-the-art in defending against adversarial attacks. Notably, the state-of-the-art projected gradient descent (PGD)-based training method has been shown to be universally and reliably effective in defending against adversarial inputs. This robustness approach uses PGD as a reliable and universal "first-order adversary". However, the behaviour of such optimisation has not been studied in the light of a fundamentally different class of attacks called backdoors. In this paper, we study how to inject and defend against backdoor attacks for robust models trained using PGD-based robust optimisation. We demonstrate that these models are susceptible to backdoor attacks. Subsequently, we observe that backdoors are reflected in the feature representation of such models. Then, this observation is leveraged to detect such backdoor-infected models via a detection technique called AEGIS. Specifically, given a robust Deep Neural Network (DNN) that is trained using PGD-based first-order adversarial training approach, AEGIS uses feature clustering to effectively detect whether such DNNs are backdoor-infected or clean.
+    In our evaluation of several visible and hidden backdoor triggers on major classification tasks using CIFAR-10, MNIST and FMNIST datasets, AEGIS effectively detects PGD-trained robust DNNs infected with backdoors. AEGIS detects such backdoor-infected models with 91.6% accuracy (11 out of 12 tested models), without any false positives. Furthermore, AEGIS detects the targeted class in the backdoor-infected model with a reasonably low (11.1%) false positive rate. Our investigation reveals that salient features of adversarially robust DNNs could be promising to break the stealthy nature of backdoor attacks. 
+
+Comments: 	Accepted in Computers & Security, 2023
+Subjects: 	Computer Vision and Pattern Recognition (cs.CV) ; Machine Learning (cs.LG); Machine Learning (stat.ML)
+Cite as: 	arXiv:2003.00865 [cs.CV]
+  	(or arXiv:2003.00865v4 [cs.CV] for this version)
+  	https://doi.org/10.48550/arXiv.2003.00865
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Sudipta Chattopadhyay [ view email ]
+[v1] Tue, 25 Feb 2020 04:45:26 UTC (7,194 KB)
+[v2] Wed, 17 Jun 2020 15:15:36 UTC (4,359 KB)
+[v3] Thu, 3 Jun 2021 07:02:14 UTC (9,117 KB)
+[v4] Wed, 11 Jan 2023 05:00:29 UTC (9,648 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Towards Backdoor Attacks and Defense in Robust Machine Learning Models, by Ezekiel Soremekun and 1 other authors
+    PDF
+    Other formats 
+
+Current browse context:
+cs.CV
+< prev   |   next >
+new | recent | 2003
+Change to browse by:
+cs
+cs.LG
+stat
+stat.ML
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+DBLP - CS Bibliography
+listing | bibtex
+Ezekiel O. Soremekun
+Sakshi Udeshi
+Sudipta Chattopadhyay
+Andreas Zeller
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

@@ -1,0 +1,89 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2110.14880
+
+Help | Advanced Search
+Search
+Computer Science > Machine Learning
+(cs)
+[Submitted on 28 Oct 2021 ( v1 ), last revised 24 Feb 2022 (this version, v4)]
+Title: AEVA: Black-box Backdoor Detection Using Adversarial Extreme Value Analysis
+Authors: Junfeng Guo , Ang Li , Cong Liu
+Download a PDF of the paper titled AEVA: Black-box Backdoor Detection Using Adversarial Extreme Value Analysis, by Junfeng Guo and Ang Li and Cong Liu
+Download PDF
+
+    Abstract: Deep neural networks (DNNs) are proved to be vulnerable against backdoor attacks. A backdoor is often embedded in the target DNNs through injecting a backdoor trigger into training examples, which can cause the target DNNs misclassify an input attached with the backdoor trigger. Existing backdoor detection methods often require the access to the original poisoned training data, the parameters of the target DNNs, or the predictive confidence for each given input, which are impractical in many real-world applications, e.g., on-device deployed DNNs. We address the black-box hard-label backdoor detection problem where the DNN is fully black-box and only its final output label is accessible. We approach this problem from the optimization perspective and show that the objective of backdoor detection is bounded by an adversarial objective. Further theoretical and empirical studies reveal that this adversarial objective leads to a solution with highly skewed distribution; a singularity is often observed in the adversarial map of a backdoor-infected example, which we call the adversarial singularity phenomenon. Based on this observation, we propose the adversarial extreme value analysis(AEVA) to detect backdoors in black-box neural networks. AEVA is based on an extreme value analysis of the adversarial map, computed from the monte-carlo gradient estimation. Evidenced by extensive experiments across multiple popular tasks and backdoor attacks, our approach is shown effective in detecting backdoor attacks under the black-box hard-label scenarios. 
+
+Subjects: 	Machine Learning (cs.LG) ; Artificial Intelligence (cs.AI)
+Cite as: 	arXiv:2110.14880 [cs.LG]
+  	(or arXiv:2110.14880v4 [cs.LG] for this version)
+  	https://doi.org/10.48550/arXiv.2110.14880
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Junfeng Guo [ view email ]
+[v1] Thu, 28 Oct 2021 04:36:48 UTC (15,628 KB)
+[v2] Fri, 29 Oct 2021 19:57:24 UTC (15,627 KB)
+[v3] Sun, 21 Nov 2021 04:38:17 UTC (16,598 KB)
+[v4] Thu, 24 Feb 2022 23:04:32 UTC (16,599 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled AEVA: Black-box Backdoor Detection Using Adversarial Extreme Value Analysis, by Junfeng Guo and Ang Li and Cong Liu
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.LG
+< prev   |   next >
+new | recent | 2110
+Change to browse by:
+cs
+cs.AI
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+DBLP - CS Bibliography
+listing | bibtex
+Junfeng Guo
+Ang Li
+Cong Liu
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

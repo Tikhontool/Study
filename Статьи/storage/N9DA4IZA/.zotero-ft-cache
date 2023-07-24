@@ -1,0 +1,87 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2110.07831
+
+Help | Advanced Search
+Search
+Computer Science > Computation and Language
+(cs)
+[Submitted on 15 Oct 2021]
+Title: RAP: Robustness-Aware Perturbations for Defending against Backdoor Attacks on NLP Models
+Authors: Wenkai Yang , Yankai Lin , Peng Li , Jie Zhou , Xu Sun
+Download a PDF of the paper titled RAP: Robustness-Aware Perturbations for Defending against Backdoor Attacks on NLP Models, by Wenkai Yang and 4 other authors
+Download PDF
+
+    Abstract: Backdoor attacks, which maliciously control a well-trained model's outputs of the instances with specific triggers, are recently shown to be serious threats to the safety of reusing deep neural networks (DNNs). In this work, we propose an efficient online defense mechanism based on robustness-aware perturbations. Specifically, by analyzing the backdoor training process, we point out that there exists a big gap of robustness between poisoned and clean samples. Motivated by this observation, we construct a word-based robustness-aware perturbation to distinguish poisoned samples from clean samples to defend against the backdoor attacks on natural language processing (NLP) models. Moreover, we give a theoretical analysis about the feasibility of our robustness-aware perturbation-based defense method. Experimental results on sentiment analysis and toxic detection tasks show that our method achieves better defending performance and much lower computational costs than existing online defense methods. Our code is available at this https URL . 
+
+Comments: 	EMNLP 2021 (main conference), long paper, camera-ready version
+Subjects: 	Computation and Language (cs.CL) ; Machine Learning (cs.LG)
+Cite as: 	arXiv:2110.07831 [cs.CL]
+  	(or arXiv:2110.07831v1 [cs.CL] for this version)
+  	https://doi.org/10.48550/arXiv.2110.07831
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Wenkai Yang [ view email ]
+[v1] Fri, 15 Oct 2021 03:09:26 UTC (627 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled RAP: Robustness-Aware Perturbations for Defending against Backdoor Attacks on NLP Models, by Wenkai Yang and 4 other authors
+    PDF
+    Other formats 
+
+Current browse context:
+cs.CL
+< prev   |   next >
+new | recent | 2110
+Change to browse by:
+cs
+cs.LG
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+DBLP - CS Bibliography
+listing | bibtex
+Yankai Lin
+Peng Li
+Jie Zhou
+Xu Sun
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

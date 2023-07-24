@@ -1,0 +1,2113 @@
+The “Beatrix” Resurrections: Robust Backdoor Detection via Gram Matrices
+
+arXiv:2209.11715v3 [cs.CR] 19 Dec 2022
+
+Wanlun Ma†, Derui Wang‡, Ruoxi Sun‡, Minhui Xue‡, Sheng Wen†, and Yang Xiang†
+
+†Swinburne University of Technology, Australia ‡CSIRO’s Data61, Australia
+
+Abstract—Deep Neural Networks (DNNs) are susceptible to backdoor attacks during training. The model corrupted in this way functions normally, but when triggered by certain patterns in the input, produces a predeﬁned target label. Existing defenses usually rely on the assumption of the universal backdoor setting in which poisoned samples share the same uniform trigger. However, recent advanced backdoor attacks show that this assumption is no longer valid in dynamic backdoors where the triggers vary from input to input, thereby defeating the existing defenses.
+In this work, we propose a novel technique, Beatrix (backdoor detection via Gram matrix). Beatrix utilizes Gram matrix to capture not only the feature correlations but also the appropriately high-order information of the representations. By learning classconditional statistics from activation patterns of normal samples, Beatrix can identify poisoned samples by capturing the anomalies in activation patterns. To further improve the performance in identifying target labels, Beatrix leverages kernel-based testing without making any prior assumptions on representation distribution. We demonstrate the effectiveness of our method through theoretical justiﬁcations and extensive comparisons with state-ofthe-art defensive techniques. The experimental results show that our approach achieves an F1 score of 91.1% in detecting dynamic backdoors, while the state of the art can only reach 36.9%.
+I. INTRODUCTION
+With an explosive growth of Machine Learning (ML) and Artiﬁcial Intelligence (AI), Deep Neural Networks (DNNs) are widely adopted in many signiﬁcant real-world and securitycritical scenarios, including facial recognition [77], self-driving navigation [80], and medical diagnosis [66]. Despite these surprising advances, it has been known that DNNs suffer from severe security issues, such as privacy leakage [78], adversarial attacks [30], [82] and backdoor attacks (a.k.a. Trojan attacks) [17], [32]. In particular, the backdoor attack is a technique of embedding a hidden malicious functionality into the DNN, which is activated only when a certain trigger appears. This hidden functionality is usually the misclassiﬁcation of an input sample to the attacker’s desired target class, given the presence of a predeﬁned trigger. For example, a stop sign corrupted by a few pieces of tape will be recognized as a speed limit sign by the navigation system in self-driving cars, which may lead to fatal consequences [25].
+Network and Distributed System Security (NDSS) Symposium 2023 28 February - 4 March 2023, San Diego, CA, USA ISBN 1-891562-83-5 https://dx.doi.org/10.14722/ndss.2023.23069 www.ndss-symposium.org
+
+BadNets [32] is one of the ﬁrst works to study the threat of neural backdoors. After that, many variants of backdoor attacks have been proposed [17], [38], [53], [93]. Despite varying in mechanisms and scenarios, all these existing backdoor attacks are premised on adopting a universal (or sample-agnostic) trigger, i.e., different poisoned samples carry the same trigger. This uniform backdoor trigger becomes the Achilles’ heel of the backdoor attacks. Based on the fact that the trigger is ﬁxed and universal, existing defensive techniques [14], [18], [27], [52], [89] can easily reconstruct or detect the trigger according to the same behaviors among different poisoned samples. For example, Neural Cleanse [89] utilizes an optimization scheme to synthesize potential trigger patterns that can convert all benign images of other classes to a speciﬁc class. The synthesized trigger pattern with abnormally small norm is considered as the attack pattern used by the adversary. Additionally, a defender can also perform run-time detection on each input sample. To examine a malicious input, STRIP [27] superimposes an input image to a set of randomly selected images and measures the entropy of the prediction outputs. If the predictions of the blending images are consistent (i.e., low entropy of prediction outputs), this input is regarded as a malicious one. In addition, SentiNet [18] exploits the explanation technique (e.g., GradCAM [73]) to locate a potential trigger region by ﬁnding a highly salient contiguous region of a given input.
+Witness to the success of the existing defenses, one might think that the threat of backdoor attacks is mitigated or neutralized. Unfortunately, the crucial weakness of such static and sample-agnostic trigger became known to adversaries and they started exploring more advanced approaches in their attacks. In the new attack paradigms, backdoor triggers (referred to as dynamic [59] or sample-speciﬁc [48] triggers) vary from sample to sample. The success of existing defensive techniques [18], [27], [89] mostly relies on the assumption that the triggers are sample-agnostic. However, the sample-speciﬁc backdoor attacks break the fundamental assumption of the existing defensive techniques, as the dynamic backdoor introduces diverse information into the trigger pattern, which makes it harder for the defender to model the trigger. As shown in Table I, current backdoor defensive techniques mainly focus on universal backdoor attacks, leaving dynamic backdoor attacks as an unaddressed crucial threat to DNNs (see more discussions in Section II-C). Although a poisoned sample is misclassiﬁed to a target label, its intermediate representation has been shown to be different from those of the normal samples in the target class [14], [84], [86]. This observation provides an important indicator to distinguish the malicious samples from the normal ones. However, when you zoom in with
+
+TABLE I: A summary of the existing defenses and our work.
+
+Type
+
+Approaches
+
+Detection Target Input Model Trigger
+
+Black-box Access
+
+No Need of Clean Data
+
+All-to-all Attack
+
+Trigger Assumption Universal Partial Dynamic
+
+I: Input Masking
+II: Model Inspection
+
+STRIP [27] Februus [22] SentiNet [18]
+Neural Cleanse [89] ABS [52] MNTD [92]
+
+III: Feature Representation
+
+Activation-Clustering [14] Spectral-Signature [86] SPECTRE [33] SCAn [84] Beatrix (our work)
+
+: the item is not supported by the defense; : the item is supported by the defense.
+
+order information, out-of-distribution (OOD) samples present more details than trojaned ones since OOD detection requires much higher-order in screening out OOD samples [41], [50], [71], [95]. This observation renders OOD detection methods to be less appealing to trojan detection as the OOD detection signal is too strong. To further demystify the reasons, OOD detection requires sufﬁcient and uncontaminated data as a priori knowledge, which is not practical in backdoor detection. Moreover, although the Gram matrix based OOD detector achieves successful performance [71], our experimental results demonstrate that it lacks robustness (using fragile deviation metrics) and efﬁciency (computing an over-powerful Gramian, e.g., 10-order Gramian as used in the work [71], see details in Section V-A) in detecting trojaned inputs.
+Our work. In this paper, we show that Gramian information of dynamically trojaned data points is highly distinct from that of the benign ones. Therefore, if we carefully design the order information (e.g., less than 10-order) and detection metrics, a Gram matrix could be an effective tool for backdoor detection.
+Our method, Beatrix (backdoor detection via gram matrix), captures not only the feature correlations but also the order information of the intermediate representations to reveal subtle changes in the activation pattern caused by backdoor triggers. Beatrix learns robust class-conditional statistics from the activation patterns of legitimate samples to effectively and efﬁciently harness the Gramian information in trojan detection. In the presence of a backdoor attack, Beatrix can capture the anomalies in the activation patterns since the difference in the feature representations of poisoned samples and legitimate samples is highlighted by our detection metrics.
+Contributions. Our main contributions are summarized as follows.
+• We present a comprehensive analysis and insights of mainstream defenses to unveil their limitations against dynamic backdoor attacks.
+• We develop and implement Beatrix, a novel approach to defend against backdoor attacks. Beatrix utilizes a statistically robust deviation measurement with Gramian information to capture the anomalies in the activation patterns induced by poisoned samples. Beatrix also leverages Regularized Maximum Mean Discrepancy to further improve the performance in identifying infected classes.
+• We demonstrate the effectiveness and robustness of our proposed method through theoretical justiﬁcations and exten-
+
+sive comparisons with state-of-the-art defensive techniques. We show that Beatrix can effectively detect sample-speciﬁc backdoor attacks and signiﬁcantly outperform the existing defenses.
+
+II. BACKGROUND
+In this section, we begin by brieﬂy introducing the concept of Gram Matrix and the advances in backdoor attacks. We then discuss the limitations of existing defenses.
+
+A. Gram Matrix in DNNs
+
+Gramian information is widely used in areas such as Gaus-
+
+sian process regression [67] and style transfer learning [28].
+
+It computes the inner products of a set of m-dimensional
+
+vectors. The vectors, for instance, can be random variables
+
+in Gaussian process or vectorized internal activation patterns
+
+in style transfer. Formally, we suppose A := {ak|ak ∈
+
+Rm}nk=1 is a set of m-dimensional random variables, and then
+
+the Gij
+
+g=ramiam knaiinkf·oramjka.tiTonhubs,ettwheeeGn raami,
+
+aj ∈ A is deﬁned as matrix G is an n × n
+
+symmetric matrix containing the gramian information between
+
+each pair of random variables in A. Since the off-diagonal
+
+entries of G represent the pairwise correlation between ai and aj, Gram matrix can be used as an covariance matrix
+
+in Gaussian process regression [67]. On the other hand, due
+
+to its effectiveness in feature learning, the Gram matrix shows
+
+remarkable performance in capturing stylistic attributes (e.g.,
+
+textures and patterns) in neural activations [46]. The high-
+
+order form of the Gram matrix has also been leveraged to
+
+improve OOD detectability [71]. The entries of p-th order of
+
+the Gram matrix is deﬁned as Gpij =
+
+api apj T
+
+1/p
+, where p is
+
+the exponent.
+
+B. Backdoor Attacks
+Backdoor attacks are a technique of injecting some hidden malicious functionality into ML systems [26], [56], [62]. The injected backdoor is activated only when a certain trigger appears in the input. This hidden functionality usually results in misclassifying the input sample into a target class predeﬁned by the attacker.
+Universal (sample-agnostic) backdoor. Although various backdoor attacks [17], [32], [38], [93] have been proposed,
+
+2
+
+the majority of them have a static trigger setting, meaning that there is only one universal trigger and any clean sample with that trigger will be misclassiﬁed to the target label [47]. Particularly, in the most common backdoor attack (i.e., BadNets [32]), an adversary can form a backdoor trigger t = (m, p), where m and p denote the blending mask and the trigger pattern, respectively. During the training of a DNN, a clean training sample pair such as (x, y) is randomly replaced by the poisoned pair (xbd, ybd) with a certain probability using the trigger embedding function B, which is deﬁned as
+
+xbd = B(x, t)
+
+(1)
+
+= x · (1 − m) + p · m
+
+(2)
+
+Partial (source-speciﬁc) backdoor. In the partial attack, only samples in a speciﬁc source class can activate the backdoor and be misclassiﬁed into the target class set by the trigger [84], [89]. As for samples in other classes, the trigger will not activate the backdoor. It is worth noting that all the trojaned samples still share the same uniform trigger in the sourcespeciﬁc backdoor attack.
+Dynamic (sample-speciﬁc) backdoor. Compared to the universal and partial backdoor attacks, dynamic backdoor attacks [48], [59], [70] make triggers that vary from sample to sample and this complicates the detection of such backdoors.
+To the best of our knowledge, there exist three dynamic backdoor attacks [48], [59], [70] 1. All of them utilize a trigger generating network to launch dynamic backdoor attacks. In this work, in addition to universal backdoors, we try defending against the state-of-the-art dynamic ones, and more speciﬁcally, invisible sample-speciﬁc [48] and input-aware dynamic backdoor [59] attacks. (We do not consider [70] since its triggers are not sample-speciﬁc and the code is not released.) Both of them consider the uniqueness and exclusiveness of triggers, i.e., each sample has a unique trigger which is nonreusable for any other sample. Herein, we will brief their attack paradigms, and readers can ﬁnd more details from the original papers [48], [59].
+Compared to the ﬁxed and universal backdoor triggers, a dynamic or sample-speciﬁc trigger is a function of the corresponding input sample x. Suppose g is a trigger generator. It can be deﬁned as a function mapping an input from the sample space X to a trigger in the trigger space T :
+
+g :x ∈ X → t ∈ T .
+
+(3)
+
+Additionally, the dynamic triggers should be non-reusable and unique. Henceforth,
+
+arg max fy∗ (B(x, g(xˆ))) = ybd ·1(x = xˆ)+y·1(x = xˆ), (4)
+y∗
+where ybd is an backdoor target and y is the ground truth label of x. In other words, a clean sample x with the trigger generated based on another sample will not activate the hidden backdoor in the model f .
+Both dynamic backdoor attacks and adversarial attacks aim to make models misbehave and share many similarities. Still,
+
+1We include [48] here because it is a sample-speciﬁc backdoor attack which is very similar to the input-aware dynamic attack of [59], though the authors do not use the term dynamic in their paper [48] explicitly.
+
+TABLE II: Limitations against Dynamic Backdoors
+
+Defense
+Type-I Type-II Type-III
+
+Limitation
+Perturbation-resistant assumption of triggers Can only reconstruct sample-agnostic triggers Strong assumption on the distribution of feature representations
+
+they have certain differences. Given a classiﬁer f , an adversary injects dynamic backdoor by jointly training a trigger generation function g with f on a clean distribution pdata and a poisoning distribution pbd. The overall training objective is
+
+max Pr [f (x+g(x)) = ybd]+max Pr [f (x) = y].
+
+g,f (x,ybd)∼pbd
+
+f (x,y)∼pdata
+
+(5)
+
+The training objective may recall a similar objective in targeted evasive (adversarial) attacks in which an adversary gˆ : maxgˆ Pr[f (x + gˆ(x)) = yt]. However, it is easily found that the dynamic backdoor attacker has the capability of training g on the training dataset of f while the adversarial attacker optimizes gˆ either in a per-sample manner or over an external dataset whose distribution is similar to that of the training dataset. As a ramiﬁcation, fybd (x + g(x)) fy∗:y∗=ybd (x + g(x)), which means f tends to be overﬁtted to the data distribution modiﬁed by g(x). Such attack was found hard to be detected by adversarial detection methods due to the statistics of f has been changed and the high conﬁdence in the misclassiﬁcation of x + g(x) [8]. In addition, further modifying the triggers during the inference stage harms the stealthiness of the dynamic backdoor attacks and requires more capability from the attacker’s side, which breaks the threat model of the dynamic backdoor. Such modiﬁcation generates a separate adversarial attack rather than being a part of the dynamic backdoor attack, which falls out of the scope of this paper.
+
+C. Existing Defenses
+As summarized in Table II, Type-I defenses assume that the backdoor trigger is resistant to perturbations. Thus, the trigger regions or trigger-carrying images can cause the same misclassiﬁcation when overlaid on other clean images [18], [22], [27]. However, this assumption is violated in dynamic backdoors where the trigger is only activated for a speciﬁc sample. Moreover, Type-II defenses try to reconstruct a universal trigger that can convert any clean sample to the same target class [52], [89]. Unfortunately, this reconstructed trigger is only valid for sample-agnostic backdoor. In contrast, the dynamic backdoor triggers vary from sample to sample, rendering the reconstructed universal trigger to be totally different from the actual dynamic triggers. In addition, Type-III defenses attempt to distinguish the difference between the representations of clean samples and those of trojaned samples. However, they either use trivial clustering techniques [14], [86] or model the representations with Gaussian distributions [33], [84], which cannot resist dynamic backdoor attacks. The detailed results can be found in our experimental analysis in Section V-B.
+A case study of SCAn. Although SCAn [84] reveals the drawbacks of current defenses relying on the sample-agnostic backdoor assumption, it only considers the partial backdoor but leaves the sample-speciﬁc attack as an open problem. We argue that there are three limitations of SCAn, which
+
+3
+
+indicates SCAn cannot be extended to defending against the sample-speciﬁc backdoor. Firstly, SCAn assumes that the representations of normal and trojaned samples can be distinguished by the ﬁrst moment (mean) discrepancy (Twocomponent decomposition assumption in SCAn). However, in the dynamic backdoor attack, the ﬁrst moment information becomes less discriminative. Secondly, SCAn models the feature distribution by a Gaussian distribution under the Linear Discriminant Analysis (LDA) [57] assumption, i.e., different mean values but same covariance for the distributions of clean and trojaned feature representations (Universal Variance assumption in SCAn). However, our normality test shown in Figure 1 resonates with the observation of previous work [95] that the feature space of DNNs does not necessarily conform with a Gaussian distribution. Thirdly, as demonstrated by our theoretical analysis in Appendix B, the essence of SCAn is to compute the weighted Mahalanobis distance between the representations of clean samples and those of trojaned samples, indicating that the effectiveness of SCAn is also dependent on the weighted value (the ratio of trojaned samples). According to their estimate [84], SCAn needs to discern roughly 50 trojaned images before it can reliably detect further attacks. This is a severe drawback for security-critical applications. For example, the adversary may have bypassed an authentication system dozens of times before being caught.
+III. OVERVIEW AND MOTIVATION
+To overcome the limitations of existing defenses, we propose a novel backdoor detection approach that covers the sample-speciﬁc backdoor attack. We ﬁrst introduce the threat model in our work and then present our key observations and ideas. Finally, we analyze the superiority of Gram matrix.
+A. Threat Model
+We consider the standard threat model which is consistent with that of the most recent backdoor attack and defense studies [32], [84], [89].
+Adversary. Similar to most backdoor poisoning settings, the goal of the adversary is to deliberately inject one or more backdoors into the target model. The compromised model performs well on clean samples, whereas it misclassiﬁes attack samples (trigger-carrying samples) to the predeﬁned target label. We assume that the adversary can access the training set of the model, and is capable of poisoning the training data without major constraints, but has no direct access to the model. This scenario allows us to study the attack under worst-case conditions from the defender’s point of view.
+Defender. The goal of the defender is to perform input-level detection to determine whether an input will trigger a malicious behavior in a untrusted model in an online setting such as the Machine-Learning-as-a-Service scenario. Furthermore, the defender aims to tell the infected classes of a backdoored model based on the instances it classiﬁes. We assume that the defender has white-box access to the target model, including the feature representation in the intermediate layers. Additionally, the defender needs a small set of clean data to help it with the detection, which was also a requirement in the previous works [18], [27], [84], [92].
+
+1
+
+% of features
+
+0.8
+
+0.6
+
+0.4
+
+CDF
+
+0.2
+
+Threshold
+
+0 0 0.2 0.4 0.6 0.8 1
+
+p-value
+
+Fig. 1: Normality Test by Shapiro-Wilk test. We can ﬁnd
+
+that about 60% features do NOT follow a normal distribution
+
+under a 95% conﬁdence score. This demonstrates that the
+
+Gaussian distribution assumption in [33], [84] is untenable in
+
+more advanced attacks such as the dynamic backdoor attack.
+
+B. Intuition and Key Idea
+Intuition. A key observation is that the clean samples of a certain class and the trojaned (trigger-carrying) samples targeted at that class are disjoint in the pixel space. Consequently, even though a trojaned sample is misclassiﬁed into the target label, its intermediate representation is somehow different from those of normal samples of the target class. The anomaly triggered by the trojaned samples can be characterized by inconsistencies between the intermediate feature representations and their predicted labels. This observation provides a basis for investigating the problem of characterizing trojaned samples from the perspective of OOD detection.
+A predictive uncertainty study [7] reveals that DNNs perform well on the samples drawn from the distribution seen in the training phase, but tend to behave unexpectedly when they encounter OOD samples that lie far from the training distribution. Analogously, trojaned samples can be thought of as OOD samples drawn from a distinct distribution in contrast to the distribution of clean samples. Therefore, we believe there is a link between the detection of trojaned samples and the OOD detection [41], [50], [71], [95].
+However, we notice there exist differences between OOD detection and backdoor detection. First, the feature representations of OOD samples can be effectively modeled by Gaussian distributions. This assumption shows superior performance on OOD detection tasks [41], [95]. On the contrary, Gaussian distributions are less capable of modeling the features of trojaned samples, due to the complexity and diversity of backdoor triggers. This dilemma is further emphasized by dynamic backdoors. As our experimental results show in Section V-B, backdoor detection methods that use Gaussian distribution, e.g., SCAn [84], achieve suboptimal performance in the identiﬁcation of dynamic backdoors. A normality test in Figure 1 also exposes the problem. Second, less attention has been paid to adversarial robustness in OOD detection methods. A priori knowledge of in-distribution/clean samples is a key piece of information for many OOD detectors [41], [71], [95] and backdoor detection methods [27], [89]. The OOD detection task assumes that a set of clean samples used for training the detector can be well curated. However, this assumption is challenged in the scenario of backdoor detection since poisoned samples may carry invisible triggers [48], [76] which can hardly be ﬁltered even by manual inspection. The lack of adversarial robustness restricts the deployment of OOD detectors in detecting trojaned inputs (see V-A in more
+
+4
+
+Benign + poison Samples, Xt
+
+... ... ...
+... ... ...
+
+Feature vectors, Vt v1 v11 v12 ... v1n v2 v21 v22 ... v2n vt vt1 vt2 ... vtn
+Hard to Identify Infection
+
+Feature Modelling
+
+Concatenated Gramian
+
+Features, St
+
+s1
+
+...
+
+s2
+
+...
+
+st
+
+...
+
+Deviation Measurement
+Deviation δ based on Median Absolute Deviation
+(MAD)
+
+Identifying Infection
+
+Higher Order Gram Matrix
+
+Beatrix
+
+Anomaly Index of Regularized Maximum
+Mean Discrepancy (RMMD)
+
+Deviation Distribution
+
+Fig. 2: An overview of Beatrix.
+
+detail). Finally, OOD detectors require sufﬁcient in-distribution data, or even OOD data [41], [50], [95]. This requirement ensures that the parameters of the detection models can be effectively estimated. However, there are usually limited clean data available to the backdoor defender. Thus, the requirements for statistical robustness under limited data are different in OOD and backdoor detection methods.
+The key idea. From our observation, backdoor defense can be viewed as the problem of detecting OOD. We argue that the problem of ﬁnding a robust detector for neural backdoors can be connected to feature modeling methods used in areas such as Gaussian process regression, style transfer, and OOD detection [28], [67], [71]. In this paper, we ﬁnd that although the trojaned and clean samples are deeply fused in the original feature space, they are distinguishable in the Gramian feature space, indicating Gram matrix is an effective tool for feature modeling. The Gram matrix derives from the inner products of feature maps across different channels. Thus, Gram matrices not only consider features in each individual channel but also incorporate the feature correlations across channels [46], [71].
+We note that the previous representation-based backdoor detection methods either use trivial clustering techniques [14], [86] or Gaussian models [33], [84] in the detection. These methods ignore the high-order information and only consider the ﬁrst moment (mean) discrepancy between clean and trojaned samples. However, the simpliﬁcation reduces the discriminative power of the methods against more complex attacks such as dynamic backdoors. To tackle the problem, we turn to high-order statistics of the feature representations since they are more sensitive to the changes in the feature space, due to its higher-power format. Our method employs not only ﬁrst-order moments but also high-order moments for feature modeling. We utilize the Gram matrix and its appropriately high-order forms to capture not only the feature correlations but also appropriately high-order information to detect trojaned samples. In addition, considering the adversarial robustness and statistical robustness in backdoor detection, we do not use the multivariate Gaussian to model the trojaned samples in the deviation measurement as Gaussian models only perform well with sufﬁcient data [64]. Instead, we utilize Median Absolute Deviation (MAD), a more robust estimation of statistical dispersion, to measure the deviation of trojaned samples. Finally, when the training dataset of a given class is contaminated, the set of examples can be viewed as a mixture of two subgroups [14], [33], [84], [86]. In contrast to previous works [33], [84] assuming that the two subgroups follow Gaussian distributions with two different means but the same covariance, we employ Regularized Maximum Mean Discrepancy (RMMD) [20] to enhance the adversarial robust-
+
+ness of our method. RMMD is a Kernel-based two-sample testing technique which does not have any assumption on the distributions. RMMD performs a hypothesis test on whether the feature representations in a given class are drawn from a mixture group (i.e., contaminated class) or a single group (i.e., uncontaminated class).
+
+C. Theoretical Analysis of Gram Matrix
+
+Let xp ∼ Pc,p and yp ∼ Pt,p be p-th order representation vectors sampled from the clean distribution Pc,p and the trojaned distribution Pt,p, respectively. Beatrix models the feature representations without any assumption on Pc,p and Pt,p. Instead, Beatrix relies on Gram matrix to extract discriminative information of Pc,p and Pt,p from their statistical moments [13]. Let up1 and S1p be the mean vector and the covariance matrix of xp, respectively. The second raw moment of xp over Pc,p is:
+
+E(xpxpT ) = E(xp)E(xp)T + E[(xp − up1)(xp − up1)T ] (6) = up1up1T + S1p.
+
+The Gramian feature of xp is deﬁned as Gxp = xpxpT . Then,
+
+E(Gxp S2p be
+
+)= the
+
+E(xpxpT ) = up1up1T mean vector and the
+
++ S1p. Similarly, let up2 and covariance of yp, we have
+
+E(Gyp ) = up2up2T + S2p over yp ∼ Pt. Therefore, the expected
+
+discriminative information captured by the Gram matrices over
+
+different exponents can be represented from the prospective of
+
+statistical moments:
+
+M (Pc, Pt) = Ep∈Z+ [E(Gxp ) − E(Gyp )]
+
+(7)
+
+= Ep∈Z+ [up1up1T − up2up2T + S1p − S2p],
+
+where Pc is a collection of distributions of clean representations with elements of different powers and Pt is that
+
+of trojaned representations. Equation 7 shows that Gramian
+
+features not only capture the ﬁrst moment discrepancy (i.e.,
+
+up1up1T −up2up2T also the second
+
+) like SCAn (when p = 1, see moment discrepancy (i.e., S1p
+
+Equation 21), but −S2p). Compared
+
+to previous methods such as SCAn, a trojaned y can still
+
+be distinguished from clean representations when the clean
+
+and trojaned distributions have the same mean. Moreover, by
+
+considering various p values, the second moment discrepancy
+
+can capture more information about high-order features and
+
+better models M (Pc, Pt).
+
+IV. DESIGN OF BEATRIX
+In this section, we provide the details of our approach to detecting backdoor attacks. The framework of Beatrix is illustrated in Figure 2.
+
+5
+
+A. Feature Modeling via Gram Matrices
+
+Formally, let h be the sub-model up to the l-th layer of
+a DNN model. Then, the feature representation of the input sample x at the l-th layer of the DNN model is deﬁned as h(x) = v ∈ Rn×m, where n is the number of channels at layer l and m is the height times the width of each feature map. The
+features correlations between channels can be expressed by
+
+G = vvT ,
+
+(8)
+
+where G ∈ Rn×n denotes the Gram matrix of the feature maps in an inner product space. In order to capture more prominent activations in feature maps, we also use the high-order Gram matrix
+
+Gp =
+
+vpvpT
+
+1/p
+,
+
+(9)
+
+where vp denotes the p-th power of the feature representation v, and Gp is the p-th order Gram matrix of v.
+
+The off-diagonal entries of Gp represent the pairwise
+
+correlation between feature maps at the l-th layer while the
+
+entries at the diagonal only relate to a single feature map. Since the matrix Gp is symmetric, we only need the upper
+
+(or lower) triangular part of it. In particular, the vectorized
+
+triangular matrix which contains the entries on and above (or
+
+below)
+
+the
+
+main
+
+diagonal,
+
+can
+
+form
+
+a
+
+1 2
+
+n(n
+
++
+
+1)-dimensional
+
+vector like Gp.
+
+We can compute Gp for each order p ∈ {1, ..., P }, where
+
+P is a hyperparameter representing the bound of the order. By
+
+concatenating all the output vectors Gp, we can derive a new
+
+representation vector s = [G1,
+
+G2,
+
+...,
+
+GP ]
+
+∈
+
+R
+
+1 2
+
+n(n+1)P
+
+for
+
+the input sample x.
+
+Let Xt denote a set of clean samples in class t. Xt has a feature presentation set Vt = {vi := h(xi), xi ∈ Xt} and a concatenated Gramian feature set St = {si, i ∈ {1, 2, ..., |Xt|}}. The task of backdoor detection can be formulated as an outlier
+detection problem: given the feature sˆ of an input sample xˆ
+and its predicted label yˆt by the target model f , we try to determine whether sˆ is an outlier, with respect to St based on the statistical properties of St.
+
+B. Deviation Measurement
+A natural choice of computing the deviation of a point sˆ is to build a multivariate Gaussian model of St. However, the problem is non-trivial because of i) the large dimensionality of the feature vector s and ii) the limited number of clean samples for estimating Gaussian parameters (especially, the covariance matrix). Therefore, building a multivariate Gaussian model for high dimensional variables is not statistically robust when there are limited data samples available. Additionally, since the feature modeling with Gram matrices has already considered the feature correlations, we can just simplify the problem and model each element in St independently. Thus, high dimensional estimation can be simpliﬁed into one dimensional estimation for each independent element.
+In the simpliﬁed case, one may still consider using the Gaussian model but its univariate version to estimate mean and standard deviation of the features. However, recall that there is limited clean data available for the defender, the
+
+estimation results (i.e., mean and standard deviation) are easier to be affected by the outliers as Gaussian models only perform well with sufﬁcient data [64]. More importantly, the individual elements of s may not follow a Gaussian distribution strictly.
+Instead of using a univariate Gaussian model, we propose to utilize Median Absolute Deviation (MAD) which is known to be more resilient to outliers in a dataset than the standard deviation σˆ [42]. The absolute deviations between all data points and their medians are gained before MAD is employed as the median of these absolute deviations.
+Given the set of concatenated Gramian features St of all clean samples Xt in class t, we can compute the median and the MAD with respect to each concatenated Gramian vector:
+
+s˜j = median({sij, ∀i ∈ {1, 2, ..., |Xt|}}),
+
+(10)
+
+M ADj = median({|sij −s˜j|, ∀i ∈ {1, 2, ..., |Xt|}}). (11)
+
+Then the deviation of the observed j-th value sˆj in the candidate feature point sˆ is deﬁned as:
+
+δj = δ(sˆj)
+
+(12)
+
+0
+
+, if min ≤ sˆj ≤ max,
+
+
+
+=
+
+  
+
+min − min
+
+sˆj
+
+,
+
+if
+
+sˆj ≤ min,
+
+(13)
+
+   
+
+sˆj
+
+−
+
+max ,
+
+max
+
+if
+
+max ≤ sˆj,
+
+where min = s˜j − k · M AD, max = s˜j + k · M AD, and k is a predeﬁned scale factor that is set to 10 in our case.
+
+Then the deviation of the candidate feature point sˆ is the sum of the deviation values over all entries in sˆ:
+
+2
+
+1 2
+
+n(n+1)P
+
+δ= n(n + 1)P
+
+δj .
+
+(14)
+
+j=1
+
+Threshold determination. The detection boundary of Beatrix
+
+is estimated by benign inputs. Due to the limited number of
+
+clean data available to the defender, we employ bootstrapping
+
+to compute the deviations of benign inputs [23]. Speciﬁcally,
+
+we randomly
+
+draw
+
+1 T
+
+samples from
+
+the clean dataset
+
+as
+
+testing
+
+samples. The remaining samples are used as training samples
+
+to estimate the min/max values. The procedure is repeated for
+
+T iterations to obtain the deviations of benign samples. The
+
+detection boundary can be determined by the defender when
+
+choosing different percentiles like STRIP [27]. For example,
+
+the defender can choose 95% as the detection boundary. This
+
+means that 95% of the deviations of benign samples are less
+
+than this detection boundary.
+
+C. Identifying Infected Labels
+The performance of Beatrix can be further improved through a local reﬁnement of the detection results to reduce false positives. Since the detection threshold in Section IV-B is predeﬁned, there could be false positive in the detection results. In an ofﬂine setting, Beatrix accumulates the historical detection results for a second statistical analysis to ablate false trojaned targets given by the threshold thereof. In the presence of a backdoor attack, the feature representations of samples in the infected class can be considered as a mixture of two subgroups [14], [33], [84], [86]. However, previous
+
+6
+
+works [33], [84] assume that these two subgroups follow Gaussian distributions with two different means but the same covariance. Therefore, they perform a hypothesis testing to determine whether these two distributions are signiﬁcantly different. However, as we discussed in Section II-C, the Gaussian assumption is not tenable in more complex scenarios, such as dynamic backdoor attacks.
+
+Therefore, we resort to the Kernel-based two-sample testing which addresses whether two sets of samples are identically distributed without assumption on their distributions [19], [20], [31], [88]. A popular test statistic for this problem is the Maximum Mean Discrepancy (MMD) [31], which is deﬁned based on a positive deﬁnite kernel function k [72]. Kernel methods provide the embedding of a distribution in a reproducing kernel Hilbert space (RKHS). For MMD with a linear kernel, k(x, x ) = x, x , it measures the distribution distance under their ﬁrst moment discrepancy [58]. In practice, a common option is to use the Gaussian kernel k(x, x ) = exp(−β x − x 22), which contains inﬁnite order of moments by looking at its Taylor series [49].
+
+In this work, we use an extension of MMD metric, termed Regularized MMD (RMMD), which incorporates two penalty terms to achieve better performance when the two sample sets are small and imbalanced [20]:
+
+RM M D(P, Q) = M M D(P, Q)2 −λP
+
+µP
+
+2 H
+
+−
+
+λQ
+
+µQ
+
+2 H
+
+(15)
+
+=
+
+µP − µQ
+
+2 H
+
+−
+
+λP
+
+µP
+
+2 H
+
+−λQ
+
+µQ
+
+2H ,
+
+(16)
+
+where P and Q denote the representation distributions represented by the samples in the two subgroups obtained from the deviation measurement.
+
+According to the work [20], this test statistic follows an asymptotic normal distribution based on theorems in [36], [74]. Similar to Neural Cleanse [89] and SCAn [84], we can leverage the Median Absolute Deviation to identify the infected label(s) with abnormally large values of RMMD statistic instead of directly computing the p-value of this test. Speciﬁcally, we denote Rt as the RMMD statistic of class t, and then anomaly index Rt∗ is deﬁned as:
+
+Rt∗ = |Rt − R˜|/(M AD(R˜) ∗ η),
+
+(17)
+
+where R˜ = median({Rt : t ∈ L}),
+
+(18)
+
+M AD(R˜) = median({Rt − R˜| : t ∈ L}). (19)
+
+As Rt follows an asymptotic normal distribution, we apply
+a constant factor η = 1.4826 to the anomaly index. We identify any label with an anomaly index Rt∗ ≥ e2 as an infected label with the conﬁdence probability ≥ (1 − 10−9) [84].
+
+V. EVALUATION
+In this section, we ﬁrst evaluate the effectiveness of our proposed method against the dynamic backdoor and then compare Beatrix with state-of-the-art defensive techniques. Finally, we also demonstrate the robustness of Beatrix against other attacks. The datasets and model structures used in our experiments are summarized in Table III. We provide detailed introduction of the experiment setup in Appendix C.
+
+(a)
+
+(b)
+
+(c)
+
+(d)
+
+(e)
+
+(f)
+
+Fig. 3: Examples of poisoned samples under the input-aware dynamic backdoor. (a), (c) and (e) are clean images, (b), (d) and (f) are poisoned images.
+
+A. Effectiveness Against Dynamic Backdoor
+Attack conﬁguration. We implement the input-aware dynamic backdoor attack [59] using the code released by the authors [3]. Figure 3 illustrates several examples of poisoned samples. We conduct the common single-target attack, i.e., the target label is the same for all trojaned samples. We set both the backdoor probability (trojaned samples with their paired triggers) and the cross-trigger probability (trojaned samples with inconsistent triggers) as 0.1. For all the four datasets, the backdoor attack success rates (ASR) are almost 100% while still achieving a comparable performance on clean data as the benign models do, as shown in Table IV. It is worth noting that the cross-trigger accuracy (the accuracy of classifying images containing dynamic triggers deliberately generated for other images) is over 80% on all the four datasets, and this shows the nonreusability and uniqueness of the triggers on mismatched clean images. The evaluation results on the invisible samplespeciﬁc backdoor attack [48] are shown in Section V-C.
+Effectiveness on various datasets. From each dataset, we randomly select 30 images per class as a clean dataset for the defender. The clean dataset accounts for no more than 6% of the whole dataset. The bound of the order of Gram matrix is set as 9. As is shown later, the detection effectiveness is stable when P ≥ 4. The experimental results on the four datasets show that our defensive technique is very effective in detecting the dynamic backdoor attack. Figure 4 illustrates the logarithmic anomaly index values ln(R∗) of infected and uninfected labels. All infected labels have much larger anomaly index values, compared to uninfected labels. This demonstrates that our defensive technique can effectively detect target classes in infected models on various datasets and model architectures. Moreover, Figure 5 illustrates that the deviations of the trojaned samples are larger than those of the benign ones. This demonstrates that our method can also effectively distinguish benign from polluted samples.
+Clean data for deviation measurement. To achieve a high accuracy in discriminating the mixed representations of benign and poisoned samples, a small set of clean samples is required for estimating the threshold in advance [18], [27], [84], [92]. The above experiments show that our method can effectively detect the dynamic attack with 30 clean images per class. Our study further demonstrates that our method can perform effectively with less clean data and even with the contaminated data. As shown in Figure 6, we can ﬁnd that even with only 8 clean images, Beatrix can still accurately identify the infected class. Moreover, we also test the robustness of Beatrix when the clean data is moderately contaminated. Figure 7 shows that Beatrix is still effective when no more than 16% (or 5 images) of the clean images per class are contaminated with poisoned ones. We also compare Beatrix with the OOD detection method [71] under this data contaminating scenario.
+
+7
+
+TABLE III: Detailed information about dataset, model architecture and clean accuracy.
+
+Dataset # of Classes # of Training Images # of Testing Images
+
+Input size
+
+Model Architecture Top-1 accuracy
+
+CIFAR10
+
+10
+
+GTSRB
+
+43
+
+VGGFace
+
+100
+
+ImageNet
+
+100
+
+50000 39209 38644 50000
+
+10000 12630 9661 10000
+
+32 × 32 × 3 32 × 32 × 3 224 × 224 × 3 224 × 224 × 3
+
+PreActResNet18 PreActResNet18
+VGG16 ResNet101
+
+94.5% 99.1% 90.1% 83.8%
+
+Percentage
+ln(R*)
+Percentage
+
+Percentage Percentage
+
+1.00
+
+0.8
+
+0.75
+
+0.20
+
+0.4
+
+clean poison
+
+0.6
+
+0.15
+
+0.3
+
+0.4
+
+0.50
+
+0.10
+
+0.2
+
+0.2
+
+0.25
+
+0.05
+
+0.1
+
+Fig. 4: The logarithmic anomaly index of infected labels on the four datasets.
+
+0.0
+
+0.00
+
+0.00
+
+0.0
+
+0.00 0.04 0.08 0.12 0.16 0.0 2.5 5.0 7.5 10.0 0.00 0.15 0.30 0.45 0.60 0.0 0.1 0.2 0.3 0.4
+
+(a) CIFAR10
+
+(b) GTSRB
+
+(c) VGGFace
+
+(d) ImageNet
+
+Fig. 5: Deviation distribution of benign and trojaned samples. The trojaned sample shows a
+
+much larger deviation than benign samples. The color boundary in the background indicates
+
+the decision threshold (same for the ﬁgures in the following sections).
+
+running time (us) per image
+
+4
+
+3.5
+
+Infected label
+
+Threshold
+
+3
+
+2.5
+
+ln(R*)
+
+2
+
+1.5
+
+1
+
+0.5
+
+0 6
+
+8 10 15 20 25 30
+
+# of clean data per class
+
+Fig. 6: The logarithmic anomaly index
+
+of infected labels when using different
+
+numbers of clean data.
+
+4
+
+3.5
+
+Infected label
+
+Threshold
+
+3
+
+2.5
+
+2
+
+1.5
+
+1
+
+0.5
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+# of Trojaned images blended in clean data
+
+Fig. 7: The logarithmic anomaly index
+
+of infected labels when clean data is
+
+contaminated.
+
+False Positive Rate
+
+0.2
+
+100
+
+TPR=0.95
+
+0.16
+
+TPR=0.99
+
+80
+
+TPR=0.995
+
+0.12
+
+Running time
+
+60
+
+0.08
+
+40
+
+0.04
+
+20
+
+0
+
+0
+
+0123456789
+
+# of oders
+
+Fig. 8: False positive rate of benign
+
+images when incorporating different
+
+bound on the order of Gram matrix.
+
+TABLE IV: Attack success rate, cross-trigger accuracy and classiﬁcation accuracy of infected models.
+
+Dataset
+CIFAR10 GTSRB VGGFace ImageNet
+
+Infected Model
+
+Attack Success Cross-trigger
+
+Rate
+
+Accuracy
+
+99.4% 99.7% 98.5% 99.5%
+
+88.6% 96.1% 82.5% 81.3%
+
+Clean Accuracy
+93.9% 99.2% 89.8% 83.5%
+
+Benign Model
+Clean Accuracy
+94.5% 99.1% 90.1% 83.8%
+
+Figure 9 shows that Beatrix is much more robust than the OOD detector when the clean data is contaminated by trojaned samples. As a result, the OOD detection method [71] cannot be directly applied to the backdoor detection.
+
+The order of Gram matrix. In the above experiments, we consider Gram matrices from the ﬁrst to the ninth order. However, incorporating high-order information induces much more computational overhead. Particularly, this overhead is of vital importance for the online scenario. Thus, it is crucial to choose an appropriate set of orders to achieve a better trade-off between detection effectiveness and computational complexity. Speciﬁcally, we construct the detector with different values of P and evaluate them in an online setting. Figure 8 illustrates that the testing time for an input sample increases from 8.9×10−6s to 78.5×10−6s when the order bound increases from 1 to 9. Additionally, we ﬁnd that the detection capability (false positive rate) of our method is stabilized when P ≥ 4. We note that the OOD detector [71] needs much higher-order Gram matrices (i.e., P = 10) to discriminate between in-
+
+distribution and out-of-distribution datasets, especially when the two datasets are similar-looking. This experimental result shows that, considering the computational efﬁciency, it is sufﬁcient to employ up to the third or the fourth order information to capture discriminative characteristics of benign and malicious inputs. Therefore, for the remaining experiments, we set P as 4 (see efﬁciency comparison in Section V-B).
+Defending against all-to-all attack. Here, we consider another type of adversary who launches all-to-all attacks [59]. Speciﬁcally, for a c-way classiﬁer, the trojaned samples originally in the i-th class are misclassiﬁed into the ((i+1) mod c)-th class. Since samples from all classes are infected by the all-to-all attack, the anomaly index values Rt∗ are no longer effective. However, as shown in Figure 10, most of the RMMD statistics Rt of different infected labels in the allto-all infected models are much larger than those of uninfected labels in the single-target attack. This demonstrates that Beatrix can still effectively defend against all-to-all attack relying on the RMMD statistics. In addition, we note that the all-toall attack is the worst case of multi-target attacks that all labels are infected. However, the more labels that are infected, the less stealthy and lower performance the backdoor attack shows, especially for large datasets. As discussed in the recent research [84], when half of the labels are infected on the 1000-class ImageNet model, its clean accuracy and attack success rate drops 5% and 41%, respectively. Additionally, we consider the all-to-all attack with dynamic backdoors, which is much stronger than the all-to-all attack with universal backdoors [92].
+
+8
+
+ln(R*) Rt
+
+5
+
+OOD
+
+Beatrix
+
+4
+
+3
+
+2
+
+1
+
+0 # o1f Trojane2d images3blended4in clean d5ata
+Fig. 9: Robustness comparison between Beatrix and the OOD detection method [71].
+
+250
+
+all-to-all
+
+single-target
+
+200
+
+150
+
+100
+
+50
+
+0
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 label index
+Fig. 10: RMMD statistics Rt of different labels in all-to-all infected models (red) and in single-target (label 2 is target) infected models (blue). Although the anomaly index Rt∗ may not be effective for the all-to-all attack, their RMMD statistics Rt are much larger than those of uninfected labels in the single-target attack.
+
+TABLE V: Defense performance against dynamic backdoors on GTSRB and CIFAR10.
+
+Scenario Ofﬂine Online
+
+Method
+NC ABS MNTD AC SCAn Beatrix
+STRIP SentiNet
+SCAn Beatrix
+
+REC(%)
+18.6 27.0 55.8 74.4 44.2 95.3
+23.0 0.00 83.3 99.8
+
+GTSRB
+PRE(%)
+9.3 41.5 91.8 6.0 31.7 87.2
+41.9 0.00 68.7 99.8
+
+F1 (%)
+12.4 32.7 69.4 11.1 36.9 91.1
+29.7 0.00 75.3 99.8
+
+CIFAR10
+
+REC(%) PRE(%)
+
+40.0 37.0 57.4 80.0 40.0 100.0
+
+25.0 49.3 63.8 28.26 57.1 83.3
+
+20.9
+
+43.9
+
+0.00
+
+0.00
+
+28.6
+
+39.1
+
+99.0
+
+95.4
+
+F1(%)
+30.8 42.3 60.4 42.1 47.1 90.9
+28.3 0.00 33.0 97.2
+
+B. Comparison
+
+In this subsection, we compare our method with several state-of-the-art methods under two scenarios that are used in [84]. In the ofﬂine protection setting, a dataset containing benign and malicious samples are processed at once, and the defender is supposed to determine whether a data class is benign or infected. On the other hand, in the online setting, samples are processed one by one, and the defender is supposed to determine whether a sample is legitimate or malicious.
+
+In the ofﬂine setting, we launch the dynamic backdoor attack [59] to generate 43 infected models with respect to the 43 classes in GTSRB and 10 infected models for CIFAR10. Additionally, we launch the conventional backdoor attack [32] to generate 172 (43×4) infected models for GTSRB and 40 (10×4) infected models for CIFAR10 with four different static triggers (Figure 19) which are also used in [18], [27], [84], [89]. For the online setting, we randomly select 4,000 samples from each dataset as testing samples, half of which carry dynamic (or static) triggers.
+
+1) Ofﬂine defense: In the ofﬂine setting, we consider four competitive methods, namely Neural Cleanse (NC) [89], ABS [52], MNTD [92], Activation Clustering (AC) [14], and SCAn [84]. We re-implemented AC according to the paper [14] since the source code is not publicly available. We also reimplemented SCAn using TensorFlow Probability (TFP) based on the original MATLAB version [5]. Moreover, we used the PyTorch version of NC [3], ABS [1] and MNTD [4]. The comparison results are presented in Tables V and VI. The results indicate that our proposed method largely outperforms all four benchmark methods against dynamic backdoors while slightly outperforming them against universal backdoors.
+
+NC leverages an optimization-based reverse engineering approach to ﬁnd a trigger pattern that causes any benign input from other classes to be misclassiﬁed into a target label.
+
+TABLE VI: Defense performance against universal backdoors on GTSRB and CIFAR10.
+
+Scenario Ofﬂine Online
+
+Method
+NC ABS MNTD AC SCAn Beatrix
+STRIP SentiNet
+SCAn Beatrix
+
+GTSRB
+
+REC(%) PRE(%)
+
+97.1
+
+61.6
+
+95.3
+
+81.2
+
+90.8
+
+81.5
+
+96.5
+
+88.8
+
+95.9
+
+96.5
+
+97.7
+
+96.0
+
+86.7
+
+97.9
+
+91.5
+
+96.2
+
+88.0
+
+95.1
+
+99.8
+
+96.4
+
+F1(%)
+75.4 87.7 85.8 92.5 96.2 96.8
+91.9 93.8 91.4 98.1
+
+CIFAR10
+
+REC(%) PRE(%)
+
+92.5
+
+51.4
+
+90.0
+
+48.6
+
+77.2
+
+77.4
+
+87.5
+
+70.6
+
+92.5
+
+90.2
+
+95.0
+
+90.5
+
+87.8
+
+96.1
+
+90.3
+
+96.9
+
+91.0
+
+96.2
+
+97.2
+
+97.1
+
+F1(%)
+66.7 63.2 77.3 79.1 91.4 92.7
+91.7 93.5 93.5 97.2
+
+However, in dynamic backdoor attacks, triggers are unique and non-reusable instead of being static and universal. As a result, the reverse-engineered triggers obtained by NC are visually and functionally different from the actual dynamic triggers. As for the 43 trojaned models infected by the dynamic backdoor on GTSRB, there are 43 × 1 = 43 poisoned classes (positives) and 43 × 42 = 1806 benign classes (negatives). The experimental results show that NC is not effective against dynamic backdoor attacks, achieving 18.6% (8/43) recall, and 9.3% (8/86) precision and 12.4% F1-score in GSTRB.
+
+AC utilizes a two-class clustering method to separate the benign and malicious samples based on their feature vectors (activations). Speciﬁcally, AC performs dimensionality reduction using Independent Component Analysis (ICA), and then clusters them using 2-means. A high silhouette score [68] of the clustering results indicates the class is infected because the two clusters obtained by 2-means do ﬁt the data well. However, under the dynamic backdoor attack, the feature presentations become less distinguishable so that AC cannot effectively separate the activations of benign and trigger-carrying samples. Therefore, AC achieves 92.5% F1-score against universal backdoor attacks whereas it yields only 11.1% F1-score against dynamic backdoor attacks on GTSRB.
+
+SCAn models the representation distribution by a Gaussian distribution so that it uses a set of clean samples to estimate the covariance matrix. Then SCAn leverages Linear Discriminant Analysis (LDA) to separate the feature representations into two subgroups. A high statistic value from the likelihoodratio test indicates the class is infected. As we discussed in Section II-C, the mean discrepancy is ineffective and the universal covariance assumption is not true in the dynamic backdoor attack. As a result, SCAn is ineffective against the dynamic backdoor attack because of its intrinsic limitations. Its F1-score against universal attacks on GSTRB is 96.2%, but it drops to 36.9% when it encounters dynamic attacks. Figure 11
+
+9
+
+provides a more in-depth analysis from the representation space perspective on CIFAR10. It shows that SCAn cannot raise the alarm when the feature representations of clean and poisoned samples are deeply fused in the dynamic backdoor. In contrast, Beatrix remains effective against the dynamic backdoor since Gram matrix is capable of capturing the subtle differences between clean and poisoned representations, as shown in Figure 11(c).
+ABS can only determine whether a model is infected or not. Therefore, we trained 100 clean models and 100 infected models with random initialization for the evaluations in universal and dynamic attacks. ABS assumes that each target label is associated with only one trigger and the trigger subverts all benign samples to the target label. This assumption is broken by the dynamic backdoor attack, in which each trojaned sample has its own unique trigger. Additionally, based upon the universal trigger assumption, ABS assumes there is only one compromised neuron activated at a time by the trigger. Put differently, the changes in the activation of the intermediate layer only depend on this single neuron when encountering a trigger-carrying sample. However, due to the uniqueness of dynamic triggers, the abnormal changes in the activation pattern are dispersed across multiple neurons. Therefore, their reverse engineered trigger cannot reﬂect the malfunction in the model infected by dynamic backdoor attacks, and consequently, it yields only 32.7% and 42.3% F1-score on GSTRB and CIFAR10 against dynamic backdoor attacks.
+MNTD, similar to ABS, can only ﬂag a model as either trojaned or benign. Therefore, we evaluate MNTD with 100 clean/infected models used in the evaluation of ABS. MNTD uses jumbo learning to generate thousands of shadow models and then train a meta-classiﬁer to learn the output differences of trojaned between clean models. MNTD fails to detect infected models with dynamic backdoor as the representations are already deep fused in the middle activation layers (see Figure 11(b)). Therefore, MNTD achieves 85.8% F1-score against universal backdoor attacks on GTSRB whereas it drops to 69.4% when it encounters dynamic attacks.
+2) Online defense: In the online setting, we consider three existing defenses, STRIP [27], SentiNet [18], and SCAn [84]. We re-implemented SentiNet according to the paper, and used the Pytorch version of STRIP [3]. SCAn is conﬁgured for online defense following the paper. The experimental results are shown in Tables V and VI.
+STRIP works by superimposing a set of randomly selected clean images to an input image and measuring the entropy of the prediction outputs. In the conventional backdoor attack, a trojaned image with a static trigger is resistant to this perturbation, leading to a much lower entropy of the outputs compared to that of a benign input. The effectiveness of STRIP relies on the dominant impact of the trigger [84]. However, this assumption no longer holds in the dynamic backdoor attack where images with mismatching triggers will deactivate the backdoors [48], [59], and subsequently the F1-score of STRIP drops from 91.9% and 91.7% against universal backdoors to only 29.7% and 28.3% against dynamic backdoors.
+SentiNet utilizes the model interpretability technique [73] to locate highly salient contiguous region (i.e., a potential trigger-region) of a given input. The extracted salient region
+
+TABLE VII: Efﬁciency comparison.
+
+Method Time (s)
+
+STRIP 0.04
+
+SentiNet 0.11
+
+SCAn 13.58
+
+Beatrix 35.14×10−6
+
+is then overlaid on a set of clean images whose classiﬁcation results are used to distinguish normal images from malicious images, since the trigger region is much more likely than normal region to subvert the clean images to the target label. What has been assumed here is that the attack is localized (i.e., the trigger-region is constrained to a small contiguous part) and universal (i.e., the attack is sample-agnostic). Both assumptions are broken by the dynamic backdoor attack where triggers are sample-speciﬁc and are distributed over different and disjointed portions of an image. Thus, the recall, precision and F1-score of SentiNet are 0%, indicating that it is no longer effective against this advanced attack.
+
+SCAn builds a composition model (covariance estimation) as well as an untangling model (mean estimation for each class) on a set of clean samples in an ofﬂine manner. Therefore, for each input sample, SCAn needs to update the untangling model for the image class. The incoming sample is tagged as malicious if it results in a class anomaly index larger than the threshold (e2) and falls into the smaller subgroup. As we discussed above, SCAn models the feature representations under the LDA assumption (see Section II-C), which is violated in the dynamic backdoor attack. Consequently, the error in the composition model leads to the ineffectiveness of the untangling model in distinguishing representations of benign inputs from those of malicious inputs. As a result, the F1-score of SCAn drops from 93.5% (in universal attacks) to 33.5% (in dynamic attacks). Additionally, due to its dependency on the accumulation of adversarial inputs [84], SCAn shows a suboptimal performance against universal attacks in the online setting while it achieves similar performance in the ofﬂine setting compared to Beatrix.
+
+Efﬁciency comparison. As the overhead is important for the online scenario, we also compare the efﬁciency of Beatrix with those of other online defenses on the GTSRB dataset. The experiment is conducted on one NVIDIA GeForce RTX 3090 GPU. The running time is averaged over 1,000 testing samples. As shown in Table VII, our approach is much faster than the three baseline methods. SCAn consumes the longest time (13.58s) compared to other three methods since it needs to update the untangling model when there is an incoming sample. SentiNet pastes the potential trigger region of the input image on clean and noise images while STRIP directly superimposes each input on clean images. Thus, SentiNet (0.11s) is slightly slower than STRIP (0.04s). The main computation overhead of Beatrix is building the deviation measurement model with clean samples, but this measurement model can be obtained through an ofﬂine training. Therefore, Beatrix only needs a forward pass to get the intermediate presentation for each sample and computes Gramian features of different orders, which can be obtained simultaneously when the user (defender) trains or tests her/his model with a dataset. Therefore, Beatrix takes only 35.14 ×10−6s (for P = 4). Furthermore, as demonstrated in Section V-A, the defender can choose a different number of orders to trade off efﬁciency and effectiveness.
+
+10
+
+ORJDULWKPLFDQRPDO\LQGH[
+
+poison clean
+
+poison clean
+
+poison clean
+
+
+
+
+
+7KUHVKROG 6&$Q %HDWUL[
+
+
+
+(a) Universal backdoor
+
+(b) Dynamic backdoor
+
+(c) Gramian of dynamic backdoor
+
+
+
+
+
+8QLYHUVDO
+
+'\QDPLF
+
+(d)
+
+Fig. 11: A case study of SCAn and Beatrix on CIFAR10 with 0-th label being the trojan target. (a) and (b) illustrate the target class’ representations projected onto their ﬁrst two principle components under the universal and dynamic backdoor attack, respectively. (c) shows the projection of the Gramian features s of representations in (b). (d) shows the logarithmic anomaly index returned by SCAn and Beatrix.
+
+(a)
+
+(b)
+
+(c)
+
+(d)
+
+(e)
+
+(f)
+
+Fig. 12: Examples of poisoned samples under ISSBA. (a) and (d) are clean images, (b) and (e) are sample-speciﬁc triggers, and (c) and (f) are poisoned images.
+
+(a)
+
+(b)
+
+(c)
+
+(d)
+
+(e)
+
+(f)
+
+Fig. 14: Examples of poisoned samples under Refool. (a) and (d) are clean images, (b) and (e) are reﬂection patterns, and (c) and (f) are poisoned images.
+
+(a)
+
+(b)
+
+Fig. 13: (a) The logarithmic anomaly index of infected and uninfected labels under ISSBA. (b) Deviation distribution of benign and trojaned samples in the infected class under ISSBA.
+
+C. Robustness Against Other Attacks
+Invisible sample-speciﬁc backdoor attack. Motivated by the advances in DNN-based image steganography [11], [83], Li et al. proposed an invisible sample-speciﬁc backdoor attack (ISSBA), where triggers are generated by a pre-trained encoder network [48]. The generated triggers are invisible additive noise containing the information of a representative string of the target label. The attacker can ﬂexibly design the string as the name and the index of the target class or even a random character. The encoder network embeds the string into a clean image to obtain a poisoned image. Thus, the poisoned image generator (encoder) is conditioned on the input images, indicating the backdoor triggers vary from input to input. A DNN classiﬁer trained on the poisoned images will misclassify images trojaned by the same encoder into the classes indicated by the embedded strings. Some examples of the poisoned ImageNet samples and their corresponding triggers are shown in Figure 12.
+We evaluate Beatrix on this attack using the infected model and the dataset shared by the authors [48]. Since they only release their implementation on the ImageNet dataset, we use the released infected model trained on a ImageNet subset which contains 200 classes with the 0-th label (goldﬁsh) being the trojan target. As shown in Figure 13, the anomaly index of the infected label (label 0) is much larger than the uninfected
+
+(a)
+
+(b)
+
+Fig. 15: (a) The logarithmic anomaly index of infected and uninfected labels under Refool. (b) Deviation distribution of benign and trojaned samples in the infected class under Refool.
+
+labels (labels 1-199), indicating that Beatrix can effectively defend against this attack. More detailed comparison with other detection methods can be found in Appendix D.
+Reﬂection backdoor attack. Liu et al. proposed reﬂection backdoor (Refool) using a special backdoor pattern based on a nature phenomenon — reﬂection [55]. Reﬂection occurs wherever there are glasses or smooth surfaces. Refool generates poisoned images by adding reﬂections to clean images based on mathematical models of physical reﬂection scenarios. Different from conventional backdoor attacks that rely on a ﬁxed trigger pattern, Refool can utilize various reﬂections as the trigger pattern, making it stealthier than other attacks. Additionally, Refool blends the clean image with a triggering reﬂection pattern, so that the trigger is complex and spans all over the image. Some examples of clean images and their poisoned counterparts with reﬂection triggers are illustrated in Figure 14.
+We evaluate Beatrix against this attack using the code and datasets shared by the authors [55]. The released datasets include three trafﬁc sign datasets: GTSRB, BelgiumTSC [85] and CTSRD [37]. In this experiment, we use the GTSRB dataset and randomly choose the reﬂection images from PascalVOC [24] following the original implementation. The target class is the speed limit sign of 30 km/h. Our detection results are demonstrated in Figure 15. It shows that the anomaly
+
+11
+
+Percentage Percentage Percentage Percentage
+
+0.30
+
+1.0
+
+0.24
+
+0.8
+
+clean poison
+
+0.18
+
+0.6
+
+0.12
+
+0.4
+
+0.06
+
+0.2
+
+0.00 0.0 0.5 1.0 1.5 2.0 2.5
+(a) ImageNet
+
+0.0 0 4 8 12 16 20
+(b) CLIP
+
+Fig. 16: Deviation distribution of benign and trojaned samples in the infected class of (a) Imagnet encoder and (b) CLIP encoder under BadEncoder attack.
+
+1.0
+
+1.0
+
+0.8
+
+0.8
+
+clean poison
+
+0.6
+
+0.6
+
+0.4
+
+0.4
+
+0.2
+
+0.2
+
+0.0 0.00 0.05 0.10 0.15 0.20
+(a) Homograph
+
+0.0 0.00 0.15 0.30 0.45 0.60
+(b) Dynamic
+
+Fig. 17: Deviation distribution of benign and trojaned samples in the infected class under (a) Homograph Backdoor Attack and (b) Dynamic Sentence Backdoor Attack.
+
+index of the infected label is larger than the threshold, and those of the uninfected labels are all below the threshold. For online detection, Beatrix can effectively distinguish clean images from trigger-carrying ones with 99.99% TPR @ 5% FPR and 98.50% TPR @ 1% FPR, as shown in Figure 15(b).
+BadEncoder attack. Another recently introduced backdoor attack is BadEncoder [38], which has been proposed for selfsupervised learning pipelines. Self-supervised learning aims to pre-train an image encoder using a large amount of unlabeled data. Thus, the pre-trained encoder can be used as a feature extractor to build downstream classiﬁers in many different tasks. BadEncoder aims to compromise the selfsupervised learning pipeline by injecting backdoors into a pre-trained image encoder such that the downstream classiﬁer built upon this trojaned encoder will inherit the backdoor behavior. To craft a trojaned image encoder, BadEncoder ﬁnetunes a clean image encoder with two additional loss terms named effectiveness loss and utility loss. The effectiveness loss measures the similarity between feature vectors of reference inputs (i.e., clean inputs in the target class) and those of trigger-carrying inputs produced by the trojaned encoder. To maintain utility as well as stealthiness, BadEncoder applies the utility loss to encourage the trojaned encoder and the clean encoder produces similar outputs given the same clean inputs. In this way, a downstream classiﬁer built upon the trojaned encoder will behave normally on clean inputs but misclassify trigger-carrying inputs into the target class since their feature representations are similar to those of clean target inputs.
+We put Beatrix into test against BadEncoder using the infected models and datasets published along with the paper that introduced the attack itself [38]. In the experiments, we consider two real-world image encoders: ImageNet encoder originally released by Google [15] and CLIP encoder by OpenAI [65]. The target downstream dataset is GTSRB, and the target class is the 12th-label (i.e., the priority road sign). Instead of building a downstream classiﬁer, we directly evaluate Beatrix on distinguishing clean and poison inputs based on their feature vectors produced by the backdoor encoder. As shown in Figure 16, Beatrix can effectively defend against BadEncoder. Speciﬁcally, Beatrix achieves 99.8% TPR @ 1% FPR on the infected ImageNet encoder, and 100% TPR @ 1% FPR on the infected CLIP encoder.
+D. Beyond the Image Domain
+Akin to previous works, we mainly focus on the image classiﬁcation tasks. There are backdoor attacks in other domains, such as natural language processing (NLP) [9], [16],
+
+(a)
+
+(b)
+
+Fig. 18: (a) The logarithmic anomaly index of infected and uninfected labels of a speech recognition backdoor model. (b) Deviation distribution of benign and trojaned samples in the infected class under the speech recognition backdoor attack.
+
+[44], acoustics signal processing [94] and malware detection [43], [75]. Here, we extend our approach to mitigate the threats posed by backdoor attacks in speech recognition and text classiﬁcation domains.
+For the NLP task, we evaluate Beatrix on the homograph backdoor attack and dynamic sentence backdoor attack proposed by Li et al. [44]. The homograph backdoor attack inserts triggers by replacing several characters of the clean sequences with their homograph equivalent. Given an original sentence, the dynamic sentence backdoor attack uses pretrained language models to generate a sufﬁx sentence to act as the trigger. We use the code and dataset shared by the authors to train poisoned BERT model on the toxic comment classiﬁcation dataset [39]. To balance the number of positive (i.e., toxic) and negative (i.e., non-toxic) samples, it draws 16225 negative samples from the negative texts so the ﬁnal dataset consists of 32450 samples. The dataset is then split to give 29205 (90% of the dataset) in the training set and 3245 (10%) in the test set. Since this is a binary classiﬁcation task, we directly evaluate the online defense performance of Beatrix. As shown in Figure 17, Beatrix achieves 89.8% TPR @ 5% FPR on homograph attack and 75.2% TPR @ 5% FPR on dynamic sentence attack.
+For the speech task, we use the speech recognition backdoor implementation provided in the work [92] on the SpeechCommand dataset [90]. The original dataset consists of 65,000 one-second audio ﬁles of 35 classes. Following the previous work [92], we use the ﬁles of 10 classes (i.e., “yes”, “no”, “up”, “down”, “left”, “right”, “on”, “off”, “stop”, “go”), which gives 30,769 training samples and 4,074 testing samples. It ﬁrst extracts the mel-spectrogram of each ﬁle and then trains an LSTM model over the mel-spectrograms. The backdoor trigger is a consecutive noise signal whose length is 0.05 seconds. Our detection results shown in Figure 18 demonstrate that Beatrix
+
+12
+
+TABLE VIII: Adaptive attack.
+
+GTSRB CIFAR10
+
+λ
+CA ASR 5% FPR 1% FPR
+CA ASR 5% FPR 1% FPR
+
+0.05
+98.5% 97.5% 99.8% 98.8%
+92.7% 98.1% 97.6% 87.2%
+
+0.1
+98.1% 96.8% 98.6% 96.6%
+91.8% 96.2% 94.3% 76.6%
+
+0.5
+93.8% 95.2% 97.4% 93.6%
+89.8% 94.6% 83.3% 51.7%
+
+1
+79.7% 89.1% 92.4% 81.0%
+69.5% 85.1% 40.5% 14.0%
+
+5
+4.7% -
+10.0% -
+
+can detect the infected label effectively and distinguish clean signal from trigger-carrying ones with 77.5% TPR @ 5% FPR.
+
+E. Adaptive Attack
+
+We study an adaptive adversary who targets at the deviation measurement of Beatrix. We consider a strong white-box adversary who controls the training process of the victim model. The objective of the adversary is to force the activation patterns of poisoned images to resemble those of clean images, so that Beatrix cannot separate the benign and malicious inputs. To achieve this goal, we design an adaptive loss to minimize the distance between poisoned and clean images of a target class, in the representation space based on multiple high-order Gram matrices. In the experiment, we set the order upper bound P as 4 in the adaptive loss. Therefore, the loss function of the adaptive attack can be denoted as follows:
+
+L = Lo + λLa,
+
+P
+
+La = Ex∈X/yt ,xt∈Xyt
+
+Gp(B(x, g(x))) − Gp(xt) 2 ,
+
+p=1
+
+where Lo is the original dynamic backdoor loss for the victim model f [59], and La denotes the adaptive loss. Gp denotes the p-th order Gram matrix of the internal activation from
+an input image. Xyt and X/yt denotes target and non-target training data, respectively. λ is a hyperparameter balancing the
+model performance and the adaptive strength.
+
+We perform this attack on the GTSRB and CIFAR10 datasets. We evaluate the online performance of Beatrix to determine whether an input image is benign or malicious during the inference phase. In the experiment, we randomly select 500 clean images from the target class and 500 poisoned images from other classes. The results are shown in Table VIII. We can ﬁnd that the true positive rate of Beatrix slightly decreases when the hyper-parameter λ increases from 0.05 to 0.5. In particular, when λ increases to 1, Beatrix yields only 14.0% TPR @ 1% FPR on CIFAR10 dataset, indicating that Beatrix is no longer effective. However, the model performance (i.e., clean accuracy on benign inputs and attack success rate on malicious ones) also decreases signiﬁcantly.
+
+VI. RELATED WORK
+Backdoor attacks. With the increasing use of pre-trained DNNs in security-sensitive domains, backdoor attacks have recently been recognized as a new threat. Current attacks inject backdoors to DNNs by either poisoning the training dataset or directly manipulating the model parameters. BadNets was ﬁrst introduced as a poisoning-based backdoor attack in which the adversary has full control over the model and training
+
+data [32]. Subsequently, a series of attempts were made to launch attacks with fewer poisoned samples and limited access to training data [17], [53]. On the other end, to make the poisoning data stealthier, there are attacks that inject poisoned samples without altering their labels [76], [87]. Recently, backdoors activated by semantic triggers with diverse patterns were studied to further conceal the attacks [12], [45], [55], [69]. The threat of neural backdoors in emerging machine learning paradigms has also been investigated [38], [76], [91], [93]. Interestingly, model replacement has been identiﬁed as an attack surface in federated learning [10]. Although various backdoor attacks are proposed, most of them employ static triggers which can be easily detected by existing defensive techniques. On the contrary, recently proposed dynamic backdoor attacks craft input-aware triggers, which hardens the detection of such backdoors [48], [59], [70].
+Defenses against backdoor attacks. Current defensive techniques can be broadly categorized into two branches. The ﬁrst line of works conducts a model analysis to identify backdoors. Otherwise, defenders can perform run-time detection against triggered backdoors. A common wisdom in model analysis is to discover anomalies in the learned representations [14], [86]. Moreover, other methods are reverse-engineering possible triggers and unlearning inserted backdoors [52], [54], [89]. However, these methods are reported as ineffective against large triggers and source-label-speciﬁc attacks [52], [84]. There is also a method that adopts a meta classiﬁer trained on a set of clean and trojaned models to identify compromised models [92]. A defender can also implement run-time detection methods when the DNN has been deployed. STRIP was proposed to detect backdoors controlled by dominant triggers [27]. SentiNet adopts Grad-Cam to detect potential backdoor locations and malicious inputs [18], [73]. A similar idea is also explored and extended in Februus [22]. However, the aforementioned methods are vulnerable to adaptive attacks such as the source-label-speciﬁc backdoor. Lately, SCAn proposed a statistical method to defend against this attack [84]; however, it is less desirable against attacks with dynamic triggers.
+VII. CONCLUSION
+In this paper, we demonstrated that the existing defensive techniques heavily rely on the premise of the universal backdoor trigger, in which poisoned samples share the same trigger and thus show the same abnormal behavior. Once this prerequisite is violated, they can no longer effectively detect the advanced backdoor attacks like dynamic backdoors, where the adversary injects sample-speciﬁc triggers to each input. Based on the observation that Gramian information of dynamically trojaned data points is highly distinct from that of the benign ones, we developed Beatrix to capture not only the feature correlations but also the appropriately high-order information of the representations of benign and malicious samples, and utilized the Kernel-based two-sample testing to identify the infect labels. Experimental results show the effectiveness and robustness of our proposed approach. Beatrix can successfully defend against backdoor attacks for not only the conventional ones but also the advanced attacks, such as dynamic backdoors which can defeat the aforementioned defensive techniques.
+
+13
+
+REFERENCES
+[1] ABS, https://github.com/naiyeleo/ABS.git.
+[2] Composite Backdoor Attack, https://github.com/TemporaryAcc0unt/ composite-attack.
+[3] Input-Aware Dynamic Backdoor Attack, https://github.com/ VinAIResearch/input-aware-backdoor-attack-release.
+[4] MNTD, https://github.com/AI-secure/Meta-Nerual-Trojan-Detection.
+[5] SCAn, https://github.com/TDteach/backdoor.git.
+[6] WANET, https://github.com/VinAIResearch/Warping-based Backdoor Attack-release.
+[7] D. Amodei, C. Olah, J. Steinhardt, P. Christiano, J. Schulman, and D. Mane´, “Concrete problems in ai safety,” arXiv preprint arXiv:1606.06565, 2016.
+[8] A. Athalye, N. Carlini, and D. Wagner, “Obfuscated gradients give a false sense of security: Circumventing defenses to adversarial examples,” in ICLR, 2018.
+[9] A. Azizi, I. A. Tahmid, A. Waheed, N. Mangaokar, J. Pu, M. Javed, C. K. Reddy, and B. Viswanath, “T-miner: A generative approach to defend against trojan attacks on dnn-based text classiﬁcation,” in USENIX Security, 2021.
+[10] E. Bagdasaryan, A. Veit, Y. Hua, D. Estrin, and V. Shmatikov, “How to backdoor federated learning,” in AISTATS, 2020.
+[11] S. Baluja, “Hiding images in plain sight: Deep steganography,” in NeurIPS, 2017.
+[12] M. Barni, K. Kallas, and B. Tondi, “A new backdoor attack in cnns by training set corruption without label poisoning,” in ICIP, 2019.
+[13] C. M. Bishop and N. M. Nasrabadi, Pattern recognition and machine learning. Springer, 2006, vol. 4, no. 4.
+[14] B. Chen, W. Carvalho, N. Baracaldo, H. Ludwig, B. Edwards, T. Lee, I. Molloy, and B. Srivastava, “Detecting backdoor attacks on deep neural networks by activation clustering,” in SafeAI@AAAI, 2019.
+[15] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” in ICML, 2020.
+[16] X. Chen, A. Salem, D. Chen, M. Backes, S. Ma, Q. Shen, Z. Wu, and Y. Zhang, “Badnl: Backdoor attacks against nlp models with semanticpreserving improvements,” in ACSAC, 2021.
+[17] X. Chen, C. Liu, B. Li, K. Lu, and D. Song, “Targeted backdoor attacks on deep learning systems using data poisoning,” arXiv preprint arXiv:1712.05526, 2017.
+[18] E. Chou, F. Tramer, and G. Pellegrino, “SentiNet: Detecting localized universal attacks against deep learning systems,” in IEEE Symposium on Security and Privacy Workshops (SPW). IEEE, 2020, pp. 48–54.
+[19] K. P. Chwialkowski, A. Ramdas, D. Sejdinovic, and A. Gretton, “Fast two-sample testing with analytic representations of probability measures,” in NeurIPS, 2015.
+[20] S. Danafar, P. Rancoita, T. Glasmachers, K. Whittingstall, and J. Schmidhuber, “Testing hypotheses by regularized maximum mean discrepancy,” arXiv preprint arXiv:1305.0423, 2013.
+[21] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei, “ImageNet: A large-scale hierarchical image database,” in CVPR, 2009.
+[22] B. G. Doan, E. Abbasnejad, and D. C. Ranasinghe, “Februus: Input puriﬁcation defense against trojan attacks on deep neural network systems,” in ACSAC, 2020.
+[23] B. Efron and R. J. Tibshirani, An introduction to the bootstrap. CRC Press, 1994.
+[24] M. Everingham and J. Winn, “The PASCAL Visual Object Classes Challenge 2012 (VOC2012) development kit,” Pattern Analysis, Statistical Modelling and Computational Learning, vol. 8, p. 5, 2011.
+[25] K. Eykholt, I. Evtimov, E. Fernandes, B. Li, A. Rahmati, C. Xiao, A. Prakash, T. Kohno, and D. Song, “Robust physical-world attacks on deep learning visual classiﬁcation,” in CVPR, 2018.
+[26] Y. Gao, B. G. Doan, Z. Zhang, S. Ma, J. Zhang, A. Fu, S. Nepal, and H. Kim, “Backdoor attacks and countermeasures on deep learning: A comprehensive review,” arXiv preprint arXiv:2007.10760, 2020.
+[27] Y. Gao, C. Xu, D. Wang, S. Chen, D. C. Ranasinghe, and S. Nepal, “STRIP: A defence against trojan attacks on deep neural networks,” in ACSAC, 2019.
+
+[28] L. A. Gatys, A. S. Ecker, and M. Bethge, “Image style transfer using convolutional neural networks,” in CVPR, 2016.
+[29] X. Gong, Y. Chen, Q. Wang, H. Huang, L. Meng, C. Shen, and Q. Zhang, “Defense-resistant backdoor attacks against deep neural networks in outsourced cloud environment,” IEEE Journal on Selected Areas in Communications, vol. 39, no. 8, pp. 2617–2631, 2021.
+[30] I. J. Goodfellow, J. Shlens, and C. Szegedy, “Explaining and harnessing adversarial examples,” ICLR, 2015.
+[31] A. Gretton, K. M. Borgwardt, M. J. Rasch, B. Scho¨lkopf, and A. Smola, “A kernel two-sample test,” The Journal of Machine Learning Research, vol. 13, no. 1, pp. 723–773, 2012.
+[32] T. Gu, K. Liu, B. Dolan-Gavitt, and S. Garg, “BadNets: Evaluating backdooring attacks on deep neural networks,” IEEE Access, vol. 7, pp. 47 230–47 244, 2019.
+[33] J. Hayase, W. Kong, R. Somani, and S. Oh, “SPECTRE: Defending against backdoor attacks using robust statistics,” arXiv preprint arXiv:2104.11315, 2021.
+[34] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in CVPR, 2016.
+[35] ——, “Identity mappings in deep residual networks,” in ECCV, 2016.
+[36] W. Hoefﬁding, “A class of statistics with asymptotically normal distributions,” Annals of Mathematical Statistics, vol. 19, no. 3, pp. 293–325, 1948.
+[37] L. Huang, Chinese Trafﬁc Sign Database, Beijing Jiaotong University, http://www.nlpr.ia.ac.cn/pal/trafﬁcdata/recognition.html.
+[38] J. Jia, Y. Liu, and N. Z. Gong, “BadEncoder: Backdoor attacks to pretrained encoders in self-supervised learning,” in IEEE S&P, 2022.
+[39] Kaggle, Toxic Comment Classiﬁcation Challenge Database, https:// www.kaggle.com/c/jigsaw-toxic-comment-classiﬁcation-challenge/.
+[40] A. Krizhevsky and G. Hinton, “Learning multiple layers of features from tiny images,” Technical Report, Citeseer, 2009.
+[41] K. Lee, K. Lee, H. Lee, and J. Shin, “A simple uniﬁed framework for detecting out-of-distribution samples and adversarial attacks,” in NeurIPS, 2018.
+[42] C. Leys, C. Ley, O. Klein, P. Bernard, and L. Licata, “Detecting outliers: Do not use standard deviation around the mean, use absolute deviation around the median,” Journal of experimental social psychology, vol. 49, no. 4, pp. 764–766, 2013.
+[43] C. Li, X. Chen, D. Wang, S. Wen, M. E. Ahmed, S. Camtepe, and Y. Xiang, “Backdoor attack on machine learning based android malware detectors,” IEEE TDSC, 2021.
+[44] S. Li, H. Liu, T. Dong, B. Z. H. Zhao, M. Xue, H. Zhu, and J. Lu, “Hidden backdoors in human-centric language models,” in CCS, 2021.
+[45] S. Li, M. Xue, B. Zhao, H. Zhu, and X. Zhang, “Invisible backdoor attacks on deep neural networks via steganography and regularization,” IEEE TDSC, 2021.
+[46] Y. Li, N. Wang, J. Liu, and X. Hou, “Demystifying neural style transfer,” in IJCAI, 2017.
+[47] Y. Li, T. Zhai, B. Wu, Y. Jiang, Z. Li, and S. Xia, “Rethinking the trigger of backdoor attack,” arXiv preprint arXiv:2004.04692, 2020.
+[48] Y. Li, Y. Li, B. Wu, L. Li, R. He, and S. Lyu, “Invisible backdoor attack with sample-speciﬁc triggers,” in ICCV, 2021.
+[49] Y. Li, K. Swersky, and R. Zemel, “Generative moment matching networks,” in ICML, 2015.
+[50] S. Liang, Y. Li, and R. Srikant, “Enhancing the reliability of out-ofdistribution image detection in neural networks,” ICLR, 2018.
+[51] J. Lin, L. Xu, Y. Liu, and X. Zhang, “Composite backdoor attack for deep neural network by mixing existing benign features,” in CCS, 2020.
+[52] Y. Liu, W.-C. Lee, G. Tao, S. Ma, Y. Aafer, and X. Zhang, “ABS: Scanning neural networks for back-doors by artiﬁcial brain stimulation,” in CCS, 2019.
+[53] Y. Liu, S. Ma, Y. Aafer, W.-C. Lee, J. Zhai, W. Wang, and X. Zhang, “Trojaning attack on neural networks,” in NDSS, 2018.
+[54] Y. Liu, G. Shen, G. Tao, Z. Wang, S. Ma, and X. Zhang, “EXRAY: Distinguishing injected backdoor from natural features in neural networks by examining differential feature symmetry,” arXiv preprint arXiv:2103.08820, 2021.
+
+14
+
+[55] Y. Liu, X. Ma, J. Bailey, and F. Lu, “Reﬂection Backdoor: A natural backdoor attack on deep neural networks,” in ECCV, 2020.
+[56] Y. Liu, A. Mondal, A. Chakraborty, M. Zuzak, N. Jacobsen, D. Xing, and A. Srivastava, “A survey on neural trojans,” in ISQED, 2020.
+[57] S. Mika, G. Ratsch, J. Weston, B. Scholkopf, and K.-R. Mullers, “Fisher discriminant analysis with kernels,” in Proceedings of the IEEE Signal Processing Society Workshop. IEEE, 1999, pp. 41–48.
+[58] K. Muandet, K. Fukumizu, B. Sriperumbudur, and B. Scho¨lkopf, “Kernel mean embedding of distributions: A review and beyond,” arXiv preprint arXiv:1605.09522, 2016.
+[59] A. Nguyen and A. Tran, “Input-aware dynamic backdoor attack,” in NeurIPS, 2020.
+[60] ——, “Wanet–imperceptible warping-based backdoor attack,” in ICLR, 2021.
+[61] R. Pang, H. Shen, X. Zhang, S. Ji, Y. Vorobeychik, X. Luo, A. Liu, and T. Wang, “A tale of evil twins: Adversarial inputs versus poisoned models,” in CCS, 2020.
+[62] R. Pang, Z. Zhang, X. Gao, Z. Xi, S. Ji, P. Cheng, and T. Wang, “TROJANZOO: Towards uniﬁed, holistic, and practical evaluation of neural backdoors,” in EuroS&P, 2022.
+[63] O. M. Parkhi, A. Vedaldi, and A. Zisserman, “Deep face recognition,” in BMVC, 2015.
+[64] J. V. Psutka and J. Psutka, “Sample size for maximum likelihood estimates of gaussian model,” in CAIP, 2015.
+[65] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al., “Learning transferable visual models from natural language supervision,” arXiv preprint arXiv:2103.00020, 2021.
+[66] A. Rajkomar, E. Oren, K. Chen, A. M. Dai, N. Hajaj, M. Hardt, P. J. Liu, X. Liu, J. Marcus, M. Sun et al., “Scalable and accurate deep learning with electronic health records,” NPJ Digital Medicine, vol. 1, no. 1, pp. 1–10, 2018.
+[67] C. E. Rasmussen, “Gaussian processes in machine learning,” in Advanced Lectures on Machine Learning: ML Summer Schools 2003, 2003, pp. 63–71.
+[68] P. J. Rousseeuw, “Silhouettes: a graphical aid to the interpretation and validation of cluster analysis,” Journal of Computational and Applied Mathematics, vol. 20, pp. 53–65, 1987.
+[69] A. Saha, A. Subramanya, and H. Pirsiavash, “Hidden trigger backdoor attacks,” AAAI, 2020.
+[70] A. Salem, R. Wen, M. Backes, S. Ma, and Y. Zhang, “Dynamic backdoor attacks against machine learning models,” in EuroS&P, 2022.
+[71] C. S. Sastry and S. Oore, “Detecting out-of-distribution examples with Gram matrices,” in ICML, 2020.
+[72] B. Scho¨lkopf, A. J. Smola, F. Bach et al., Learning with kernels: support vector machines, regularization, optimization, and beyond. MIT Press, 2002.
+[73] R. R. Selvaraju, M. Cogswell, A. Das, R. Vedantam, D. Parikh, and D. Batra, “Grad-CAM: Visual explanations from deep networks via gradient-based localization,” in ICCV, 2017.
+[74] R. J. Serﬂing, Approximation theorems of mathematical statistics. John Wiley & Sons, 2009, vol. 162.
+[75] G. Severi, J. Meyer, S. Coull, and A. Oprea, “{Explanation-Guided} backdoor poisoning attacks against malware classiﬁers,” in USENIX Security, 2021.
+[76] A. Shafahi, W. R. Huang, M. Najibi, O. Suciu, C. Studer, T. Dumitras, and T. Goldstein, “Poison frogs! targeted clean-label poisoning attacks on neural networks,” in NeurIPS, 2018.
+[77] M. Sharif, S. Bhagavatula, L. Bauer, and M. K. Reiter, “Accessorize to a crime: Real and stealthy attacks on state-of-the-art face recognition,” in CCS, 2016.
+[78] R. Shokri, M. Stronati, C. Song, and V. Shmatikov, “Membership inference attacks against machine learning models,” in IEEE S&P, 2017.
+[79] K. Simonyan and A. Zisserman, “Very deep convolutional networks for large-scale image recognition,” ICLR, 2015.
+[80] C. Sitawarin, A. N. Bhagoji, A. Mosenia, M. Chiang, and P. Mittal, “DARTS: Deceiving autonomous cars with toxic signs,” arXiv preprint arXiv:1802.06430, 2018.
+
+[81] J. Stallkamp, M. Schlipsing, J. Salmen, and C. Igel, “Man vs. computer: Benchmarking machine learning algorithms for trafﬁc sign recognition,” Neural Networks, vol. 32, pp. 323–332, 2012.
+[82] C. Szegedy, W. Zaremba, I. Sutskever, J. Bruna, D. Erhan, I. Goodfellow, and R. Fergus, “Intriguing properties of neural networks,” ICLR, 2014.
+[83] M. Tancik, B. Mildenhall, and R. Ng, “StegaStamp: Invisible hyperlinks in physical photographs,” in CVPR, 2020.
+[84] D. Tang, X. Wang, H. Tang, and K. Zhang, “Demon in the variant: Statistical analysis of dnns for robust backdoor contamination detection,” in USENIX Security, 2021.
+[85] R. Timofte, K. Zimmermann, and L. Van Gool, “Multi-view trafﬁc sign detection, recognition, and 3d localisation,” Machine vision and applications, vol. 25, no. 3, pp. 633–647, 2014.
+[86] B. Tran, J. Li, and A. Madry, “Spectral signatures in backdoor attacks,” in NeurIPS, 2018.
+[87] A. Turner, D. Tsipras, and A. Madry, “Label-consistent backdoor attacks,” arXiv preprint arXiv:1912.02771, 2019.
+[88] G. Varoquaux et al., “Comparing distributions: 1 geometry improves kernel two-sample testing,” in NeurIPS, 2019.
+[89] B. Wang, Y. Yao, S. Shan, H. Li, B. Viswanath, H. Zheng, and B. Y. Zhao, “Neural Cleanse: Identifying and mitigating backdoor attacks in neural networks,” in IEEE S&P, 2019.
+[90] P. Warden, “Speech commands: A dataset for limited-vocabulary speech recognition,” arXiv preprint arXiv:1804.03209, 2018.
+[91] C. Xie, K. Huang, P.-Y. Chen, and B. Li, “DBA: Distributed backdoor attacks against federated learning,” in ICLR, 2019.
+[92] X. Xu, Q. Wang, H. Li, N. Borisov, C. A. Gunter, and B. Li, “Detecting AI trojans using meta neural analysis,” in IEEE S&P, 2021.
+[93] Y. Yao, H. Li, H. Zheng, and B. Y. Zhao, “Latent backdoor attacks on deep neural networks,” in CCS, 2019.
+[94] T. Zhai, Y. Li, Z. Zhang, B. Wu, Y. Jiang, and S.-T. Xia, “Backdoor attack against speaker veriﬁcation,” in ICASSP, 2021.
+[95] E. Zisselman and A. Tamar, “Deep residual ﬂow for out of distribution detection,” in CVPR, 2020.
+APPENDIX
+A. DETAILED DISCUSSION OF EXISTING BACKDOOR DETECTION
+Defending against universal backdoor. In universal backdoor attacks where different trojaned samples share a same trigger, the trojaned model is overﬁtted to the backdoor trigger [47]. Thus, the misclassiﬁcation of a trojaned image is predominantly depended on the trigger regardless of the image content [48], [59], [84]. This rudimentary setting is the Achilles heel of the existing attacks such that the overﬁtted trigger pattern gives rise to a series of detection methods [14], [18], [27], [52], [89]. Based on the assumption that the backdoor trigger is sample-agnostic, existing defensive techniques can easily estimate the universal trigger [52], [89] or detect the trojaned samples according to their common abnormal behavior [14], [18], [27].
+The success of all these defensive techniques relies on the premise of universal backdoors where the same trigger subvert all benign inputs. Once this assumption is violated, their effectiveness will be heavily vitiated.
+Defending against partial backdoor. Firstly highlighted in [89], the partial backdoor was considered as a powerful and stealthy attack since the trigger only convert samples in a speciﬁc class but has no impact on those in other classes. Although several works [22], [52], [89] attempt to defend against the partial backdoor attacks, their main assumptions
+
+15
+
+still focus on the universal backdoor attacks. Realizing the vulnerability of the existing backdoor defenses that focus on sample-agnostic (a.k.a. source-agnostic) backdoors, Tang et al. [84] studied the source-speciﬁc backdoor attack and showed that the trojaned and benign samples are clearly distinguishable in the feature space under the universal backdoor, but deeply tangling with each other under the partial backdoor. Therefore, They proposed Statistical Contamination Analysis (SCAn) to detect the source-speciﬁc backdoor by modeling the distributions of benign and malicious samples’ representations.
+B. THEORETICAL ANALYSIS OF SCAN
+SCAn models the feature distribution by a Gaussian distribution under the Linear Discriminant Analysis (LDA) assumption, i.e., different mean values but same covariance for the distributions of clean and trojaned feature representations. Formally, let the identity vectors (mean values) of clean and poisoned data be u1 and u2 respectively. And the covariance is denoted as S . Then, the representation of a clean sample is riclean = u1 + ei, where ei ∼ N (0, S ) and riclean follows a Gaussian distribution N (u1, S ). Similarly, the representation of a poisoned sample can be denoted as rjpoison = u2 + ej, where ej ∼ N (0, S ) and ripoison ∼ N (u2, S ).
+Let n1 denote the number of clean samples and n2 denotes the number of poison samples in the target (i.e., infected) class. Then, the mean value of the representations of all samples (clean and poison samples) in this class is:
+
+1 u0 = N
+1 =
+N 1 = N
+
+n1
+
+n2
+
+riclean +
+
+rjpoison
+
+n1
+
+n2
+
+(u1 + ei) + (u2 + ej)
+
+n1
+
+n1
+
+n2
+
+n2
+
+u1 + ei + u2 + ej
+
+Recall that ei and ej ∼ N (0, S ),
+
+u0
+
+=
+
+n1 N
+
+u1
+
++
+
+n2 N
+
+u2
+
+SCAn formulates the task of backdoor detection as a likelihood-ratio test problem over the feature representations of all samples (i.e., R = Rclean ∪ Rpoison) based on two hypotheses:
+Null Hypothesis H0: R is drawn from a single normal distribution.
+Alternative Hypothesis H1 : R is drawn from a mixture of two normal distributions.
+Therefore, the likelihood ratio under H1 hypothesis (i.e., the class is infected) is deﬁned as [84]:
+
+N
+L= (rk −u0)S−1(rk −u0)T−(rk −um)S−1(rk −um)T
+k
+
+where m ∈ {1, 2} is the label of the representation rk.
+
+n1
+
+L=
+
+(ri −u0)S−1(ri −u0)T−(ri −u1)S−1(ri −u1)T
+
+i n2
+
+(20)
+
++ (rj −u0)S−1(rj −u0)T−(rj −u2)S−1(rj −u2)T
+
+j
+
+When rk is clean sample (the ﬁrst term in (20)):
+
+n1
+(ri −u0)S−1(ri −u0)T −(ri −u1)S−1(ri −u1)T
+
+i
+
+n1
+= [(u1 + ei − u0)S−1(u1 + ei − u0)T
+
+i
+
+− (u1 + ei − u1)S−1(u1 + ei − u1)T ]
+
+n1
+
+=
+
+(u1 + ei − u0)S−1(u1 + ei − u0)T − eiS−1eTi
+
+i
+
+=
+
+n1
+[(u1
+
++ ei
+
+−
+
+n1 N
+
+u1
+
++
+
+n2 N
+
+u2
+
+)S−1
+
+(u1
+
++ ei −
+
+n1 N
+
+u1
+
++
+
+n2 N
+
+u2 )T
+
+i
+
+− eiS−1eTi ]
+
+n1
+=
+
+(
+
+n2 N
+
+(u1
+
+−u2)+ei)S−1(
+
+n2 N
+
+(u1
+
+−u2)+ei)T
+
+− ei S −1 eTi
+
+i
+
+=
+
+n1 i
+
+[(
+
+n2 N
+
+)2(u1
+
+− u2)S−1(u1
+
+− u2)T
+
++
+
+2
+
+n2 N
+
+(u1
+
+− u2)S−1eTj
+
++
+
+ei S −1 eTi
+
+−
+
+eiS−1eTi ]
+
+n1
+=
+
+(
+
+n2 N
+
+)2(u1
+
+−u2)S−1(u1
+
+−u2)T
+
++2
+
+n2 N
+
+(u1
+
+− u2 )S −1 eTj
+
+i
+
+Recall that ei ∼ N (0, S ),
+
+n1
+=
+
+(
+
+n2 N
+
+)2(u1
+
+−
+
+u2 )S −1 (u1
+
+−
+
+u2 )T
+
+i
+
+Similarly, when rk is poison sample (the second term in (20)):
+
+n2
+j n2
+=
+j
+
+(rj −u0)S−1(rj −u0)T −(rj − u2)S−1(rj −uj )T
+
+(
+
+n1 N
+
+)2(u1
+
+−
+
+u2 )S −1 (u1
+
+−
+
+u2 )T
+
+Therefore, the likelihood ratio of the infected class is
+
+n1
+L=
+
+(
+
+n2 N
+
+)2(u1
+
+−
+
+u2 )S −1 (u1
+
+−
+
+u2 )T
+
+i
+
+n2
++
+j
+
+(
+
+n1 N
+
+)2(u1
+
+−
+
+u2 )S −1 (u1
+
+−
+
+u2 )T
+
+=
+
+n1(
+
+n2 N
+
+)2
+
++
+
+n2(
+
+n1 N
+
+)2
+
+(u1 − u2)S−1(u1 − u2)T
+
+=
+
+n1n2(n1 + n2) N2
+
+(u1 − u2)S−1(u1 − u2)T
+
+=
+
+n1 n2 N
+
+(u1 − u2)S−1(u1 − u2)T
+
+(21)
+
+C. EXPERIMENT SETUP
+Datasets. To evaluate the performance of our proposed method, we take four datasets which are commonly used in backdoor-related works [48], [62], [84], [89]:
+
+16
+
+• CIFAR10 [40]. It consists of 50,000 colored training images of size 32×32 and 10,000 testing images which are equally distributed on 10 classes;
+• GTSRB [81]. It consists of 39,209 colored training images and 12,630 testing images of 43 different trafﬁc signs. The image sizes range from 29 × 30 to 144 × 48. However, we resize them all to be 32×32.
+• VGGFace [63]. In the original dataset, there are 2,622 identities and each identity has 1,000 face images in 224×224 pixels. However, about half of the links are no longer available. Following the previous work [48], we select the top 100 identities with the largest number of images. This way, we obtain 100 identities with 48,305 images. We randomly split them into training and testing samples with a ratio of 8:2.
+• ImageNet [21]. This dataset is related to the object classiﬁcation task. Similar to [48], [61], [62], we randomly select a subset containing 100 classes. Out of their samples, 50,000 224×224 sized images are picked for training (500 images per class) and 10,000 images are put aside for testing (100 images per class).
+Models. To build the classiﬁer on CIFAR-10 and GTSRB, we use Pre-activation ResNet18 [35], following the original dynamic backdoor [59]. Additionally, we use VGG16 [79] for VGGFace and ResNet101 [34] for ImageNet datasets, respectively. Their top-1 accuracy on the corresponding testset is summarized in Table III.
+
+(a)
+
+(b)
+
+(c)
+
+(d)
+
+Fig. 19: Four static triggers used in our experiments.
+
+D. DEFENSE PERFORMANCE AGAINST ISSBA
+In Section V-C, we demonstrate the robustness of Beatrix against the invisible sample-speciﬁc backdoor attack (ISSBA). In this section, we provide a comprehensive comparison with the state-of-the-art defense approaches on ISSBA. In the ofﬂine setting, we generate 20 infected models with respect to the target label from 0 to 19. For online setting, we randomly select 2000 samples from each dataset as testing samples, half of which carry dynamic (or static) triggers. Similar to results on the input-aware dynamic backdoor attack, the experimental results on ISSBA demonstrate that Beatrix can signiﬁcantly outperform the existing defenses, as shown in Table. IX.
+
+E. ABLATION STUDY
+We carried out a variety of ablation studies to demonstrate the effectiveness of using MAD and RMMD as the detection metrics in our approach. Herein, Beatrix-UG uses a univariate Gaussian model in the deviation measurement, and BeatrixG assumes that the benign and malicious samples follow Gaussian distributions. In Beatrix-UG, we use the variance of Gramian features instead of MAD. That is
+
+s¯j = mean({sij , ∀i ∈ {1, 2, ..., |Xt|}}),
+
+(22)
+
+variance = mean({(sij − s¯j )2, ∀i ∈ {1, 2, ..., |Xt|}}). (23)
+
+TABLE IX: Defense performance against ISSBA on ImageNet.
+
+Scenario
+
+Method
+
+ImageNet REC(%) PRE(%)
+
+F1 (%)
+
+NC
+
+35.0
+
+ABS
+
+40.0
+
+Ofﬂine
+
+AC
+
+90.0
+
+SCAn
+
+40.0
+
+Beatrix
+
+85.0
+
+15.9
+
+21.9
+
+47.1
+
+43.2
+
+35.3
+
+50.7
+
+72.7
+
+51.6
+
+100.0
+
+91.9
+
+STRIP
+
+17.5
+
+Online
+
+SentiNet SCAn
+
+0.00 45.8
+
+Beatrix
+
+98.5
+
+41.9
+
+24.6
+
+0.00
+
+0.00
+
+79.2
+
+58.0
+
+99.0
+
+98.7
+
+TABLE X: Ablation study. The defense performance against dynamic backdoors on GTSRB and CIFAR10.
+
+Scenario Ofﬂine Online
+
+Method
+Beatrix-UG Beatrix-G
+Beatrix Beatrix-UG
+Beatrix
+
+REC(%)
+97.7 76.7 95.3
+99.5 99.8
+
+GTSRB
+PRE(%)
+77.8 73.3 87.2
+93.9 99.8
+
+F1 (%)
+86.6 75.0 91.1
+96.6 99.8
+
+CIFAR10
+
+REC(%) PRE(%)
+
+50.0
+
+83.3
+
+10.0
+
+33.3
+
+100.0
+
+83.3
+
+95.0
+
+79.0
+
+99.0
+
+95.4
+
+F1(%)
+62.5 15.4 90.9
+86.0 97.2
+
+In Beatrix-G, we alter RMMD metric to mahalanobis distance metric which assumes the data distribution is characterized by a mean and the covariance matrix (i.e., multivariate Gaussian distribution assumption in SCAn). Since this change only affects the identiﬁcation of infected labels, we only evaluate its performance in the ofﬂine setting. As shown in Table X, for both online and ofﬂine cases, our approach with MAD and RMMD outperforms the baselines.
+F. DEFENSE PERFORMANCE AGAINST COMPOSITE BACKDOOR [51]
+Instead of injecting new features that do not belong to any output label, Lin et al. proposed composite attack that uses composition of existing benign features/objects as the trigger. It leverages a mixer to generate poisonous samples. The poisoned model causes targeted misclassiﬁcation when the trigger composition is present. We evaluate Beatrix against this attack on the object recognition task using the code shared by the authors [2]. Following the original implementation, we poison the model to predict mixer(airplane, automobile) to bird in CIFAR10 dataset. Figure 20 demonstrates the effectiveness of Beatrix. It shows that the anomaly index of the infected label (bird) is larger than the threshold, and those of the uninfected labels are all below the threshold. For online detection, Beatrix can effectively distinguish clean images from poisoned ones with 92.11% TPR @ 5% FPR and 96.88% AUC score.
+G. DEFENSE PERFORMANCE AGAINST WANET [60]
+To improve the stealthiness of backdoor attacks, Nguyen et al. proposed WANET based on image warping. WANET adopts the same elastic transformation in generating backdoor images, making the modiﬁcation unnoticeable for human eyes. We put Beatrix into test against WANET on CIFAR10 using the published code [6]. As shown in Figure 21, Beatrix can effectively identify the infected label (label 0) of the poisoned
+
+17
+
+OQ5 Percentage
+
+,QIHFWHGODEHO
+
+
+7KUHVKROG
+
+
+
+
+
+
+
+ &,)$5
+
+1.0
+
+clean
+
+0.8
+
+poison
+
+0.6
+
+0.4
+
+0.2
+
+0.0 0.0 0.5 1.0 1.5 2.0 2.5
+
+(a)
+
+(b)
+
+Fig. 20: (a) The logarithmic anomaly index of infected and uninfected labels under the composite attack. (b) Deviation distribution of benign and trojaned samples in the infected class under the composite attack.
+
+OQ5 Percentage
+
+,QIHFWHGODEHO
+
+
+
+7KUHVKROG
+
+
+
+
+
+
+
+&,)$5
+
+1.0
+
+clean
+
+0.8
+
+poison
+
+0.6
+
+0.4
+
+0.2
+
+0.0 0.00 0.02 0.04 0.06 0.08 0.10
+
+(a)
+
+(b)
+
+Fig. 21: (a) The logarithmic anomaly index of infected and uninfected labels under WANET. (b) Deviation distribution of benign and trojaned samples in the infected class under WANET.
+
+model, and achieve 89.90% TPR @ 5% FPR and 97.94% AUC score in online detection.
+
+H. DEFENSE PERFORMANCE AGAINST MULTI-TRIGGER ATTACK [29]
+In order to increase the triggers diversity to avoid being detected, Gong et al. proposed ROBNET using a multilocation patching method. And they extend the attack space by designing multi-trigger backdoor attacks that can produce different triggers targeting the same or different misclassiﬁcation label(s). We re-implemented this attack according to the paper [29] since the source code is not publicly available. We evaluate Beatrix against ROBNET (i.e., the multi-trigger same-label attack and multi-trigger multi-label attack) on the CIFAR10 dataset. For both types of attacks, we set the number of triggers as 8 which is the maximum number of triggers used in the original paper. Beatrix can effectively distinguish the benign and trojaned samples in the infected class under both the multi-trigger same-label attack (Figure 22.a) and the multitrigger multi-label attack (Figure 22.b). Similar to the all-to-all attack, the anomaly index Rt∗ may not be effective when more than a half of labels are infected in the multi-trigger multilabel attack. However, the RMMD statistics Rt of infected labels are much larger than those of uninfected labels, which can also indicate the existence of backdoor attacks.
+
+Percentage
+
+1.0
+
+clean
+
+0.8
+
+poison
+
+0.6
+
+0.4
+
+0.2
+
+0.0 01234
+
+Percentage
+
+1.0
+
+clean
+
+0.8
+
+poison
+
+0.6
+
+0.4
+
+0.2
+
+0.0 01234
+
+(a)
+
+(b)
+
+Rt
+
+120
+
+90
+
+60
+
+30
+
+0
+
+clean label
+
+target label
+
+0 1 2 3 4 5 6 7 8 9 label index
+(c)
+Fig. 22: Deviation distribution of benign and trojaned samples in the infected class under (a) the multi-trigger same-label attack and (b) the multi-trigger multi-label attack. (c) RMMD statistics Rt of poisoned labels (red) and clean labels (blue) in multi-trigger multi-label attack with the number of triggers being 8.
+
+4
+
+3.5
+
+Infected label
+
+Threshold
+
+3
+
+2.5
+
+ln(R*)
+
+2
+
+1.5
+
+1
+
+0.5
+
+0 0
+
+5 10 15 20 25 30
+
+# of transformed samples
+
+Fig. 23: The logarithmic anomaly index of infected labels
+
+when different numbers of clean images are transformed by
+
+the COLORJITTER function.
+
+I. DEFENSE PERFORMANCE ON NON-GAUSSIAN DISTRIBUTION DATASET
+We also evaluate Beatrix on a non-Gaussian distribution dataset where there are feature differences within one class. We use COLORJITTER in PyTorch to randomly change the brightness, contrast, saturation and hue of benign images (all parameters are set as 0.5). As shown in Figure 23, even if all 30 clean images are transformed by COLORJITTER, the computed ln(Rt∗) remains effective.
+
+18
+

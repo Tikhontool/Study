@@ -1,0 +1,1084 @@
+Anti-Backdoor Learning: Training Clean Models on Poisoned Data
+
+arXiv:2110.11571v3 [cs.LG] 1 Dec 2021
+
+Yige Li Xidian University yglee@stu.xidian.edu.cn
+
+Xixiang Lyu † Xidian University xxlv@mail.xidian.edu.cn
+
+Nodens Koren University of Copenhagen nodens.f.koren@di.ku.dk
+
+Lingjuan Lyu Sony AI
+Lingjuan.Lv@sony.com
+
+Bo Li University of Illinois at Urbana–Champaign
+lbo@illinois.edu
+
+Xingjun Ma † Deakin University daniel.ma@deakin.edu.au
+
+Abstract
+Backdoor attack has emerged as a major security threat to deep neural networks (DNNs). While existing defense methods have demonstrated promising results on detecting or erasing backdoors, it is still not clear whether robust training methods can be devised to prevent the backdoor triggers being injected into the trained model in the ﬁrst place. In this paper, we introduce the concept of anti-backdoor learning, aiming to train clean models given backdoor-poisoned data. We frame the overall learning process as a dual-task of learning the clean and the backdoor portions of data. From this view, we identify two inherent characteristics of backdoor attacks as their weaknesses: 1) the models learn backdoored data much faster than learning with clean data, and the stronger the attack the faster the model converges on backdoored data; 2) the backdoor task is tied to a speciﬁc class (the backdoor target class). Based on these two weaknesses, we propose a general learning scheme, Anti-Backdoor Learning (ABL), to automatically prevent backdoor attacks during training. ABL introduces a two-stage gradient ascent mechanism for standard training to 1) help isolate backdoor examples at an early training stage, and 2) break the correlation between backdoor examples and the target class at a later training stage. Through extensive experiments on multiple benchmark datasets against 10 state-of-the-art attacks, we empirically show that ABL-trained models on backdoor-poisoned data achieve the same performance as they were trained on purely clean data. Code is available at https://github.com/bboylyg/ABL.
+1 Introduction
+A backdoor attack is a type of training-time data poisoning attack that implant backdoor triggers into machine learning models by injecting the trigger pattern(s) into a small proportion of the training data [1]. It aims to trick the model to learn a strong but task-irrelevant correlation between the trigger pattern and a target class, and optimizes three objectives: stealthiness of the trigger pattern, injection (poisoning) rate and attack success rate. A backdoored model performs normally on clean test data yet consistently predicts the target class whenever the trigger pattern is attached to a test example.
+†Correspondence to: Xixiang Lyu, Xingjun Ma.
+35th Conference on Neural Information Processing Systems (NeurIPS 2021), Sydney, Australia.
+
+Studies have shown that deep neural networks (DNNs) are particularly vulnerable to backdoor attacks [2]. Backdoor triggers are generally easy to implant but hard to detect or erase, posing signiﬁcant security threats to deep learning.
+
+Existing defense methods against backdoor attacks can be categorized into two types: detection methods and erasing methods [3]. Detection methods exploit activation statistics or model properties to determine whether a model is backdoored [4, 5], or whether a training/test example is a backdoor example [6, 7]. While detection can help identify potential risks, the backdoored model still needs to be puriﬁed. Erasing methods [8–10] take one step further and remove triggers from the backdoored model. Despite their promising results, it is still unclear in the current literature whether the underlying model learns clean and backdoor examples in the same way. The exploration of this aspect leads to a fundamental yet so far overlooked question, “Is it possible to train a clean model on poisoned data?"
+
+Intuitively, if backdoored data can be identiﬁed during training, measures can be taken to prevent the model from learning them. However, we ﬁnd that this is not a trivial task. One reason is that we do not know the proportion nor the distribution of the backdoored data in advance. As shown in Figure 1, on CIFAR-10, even if the poisoning rate is less than 1%, various attacks can still achieve high attack success rates. This signiﬁcantly increases the difﬁculty of backdoor data detection as the model’s learning behavior may remain the same with or without a few training examples. Even worse, we may accidentally remove a lot of valuable data when the dataset is completely clean. Another important reason is that the backdoor may have already been learned by the model even if the backdoor examples are identiﬁed at a later training stage.
+
+100
+
+90
+
+Attack success rate (%)
+
+80
+
+70
+
+60
+
+BadNets
+
+Blend
+
+SIG
+
+50
+
+Trojan
+
+Dynamic
+
+CL
+
+40
+
+30
+
+20
+
+10
+
+0 0.5% (250)
+
+1% (500)
+
+5% (2500)
+
+Poisoning rate
+
+10% (5000)
+
+Figure 1: Attack success rate (ASR)
+
+of 6 backdoor attacks under different
+
+poisoning rates on CIFAR-10. 4 out of
+
+the 6 attacks can achieve nearly 100%
+
+ASR at poisoning rate 0.5%.
+
+In this paper, we frame the overall learning process on a backdoor-poisoned dataset as a dual-task learning problem, with the learning of the clean portion as the original (clean) task and the learning of the backdoored portion as the backdoor task. By investigating the distinctive learning behaviors of the model on the two tasks, we identify two inherent characteristics of backdoor attacks as their weaknesses. First, the backdoor task is a much easier task compared to the original task. Consequently, the training loss of the backdoored portion drops abruptly in early epochs of training, whereas the loss of clean examples decreases at a steady pace. We also ﬁnd that the stronger the attack, the faster the loss on backdoored data drops. This ﬁnding indicates that the backdoor correlations imposed by stronger attacks are easier and faster to learn, and marks one distinctive learning behavior on backdoored data. Second, the backdoor task is tied to a speciﬁc class (i.e., the backdoor target class). This indicates that the correlation between the trigger pattern and the target class could be easily broken by simply randomizing the class target, for instance, shufﬂing the labels of a small proportion of examples with low loss.
+
+Inspired by the above observations, we propose a principled Anti-Backdoor Learning (ABL) scheme that enables the training of clean models without any prior knowledge of the distribution of backdoored data in datasets. ABL introduces a gradient ascent based anti-backdoor mechanism into the standard training to help isolate low-loss backdoor examples in early training and unlearn the backdoor correlation once backdoor examples are isolated. In summary, our main contributions are:
+
+• We present a novel view of the problem of robust learning with poisoned data and reveal two inherent weaknesses of backdoor attacks: faster learning on backdoored data and target-class dependency. The stronger the attack is, the more easily it can be detected or disrupted.
+• We propose a novel Anti-Backdoor Learning (ABL) method that is capable of training clean models on poisoned data. To the best of our knowledge, ABL is the ﬁrst method of its kind in the backdoor defense literature, complementing existing defense methods.
+• We empirically show that our ABL is robust to 10 state-of-the-art backdoor attacks. The models trained using ABL are of almost the same clean accuracy as they were directly trained on clean data and the backdoor attack success rates on these models are close to random guess.
+
+2
+
+2 Related Work
+Backdoor Attack. Existing backdoor attacks aim to optimize three objectives: 1) making the trigger pattern stealthier; 2) reducing the poisoning (injection) rate; 3) increasing the attack success rate [3]. Creative design of trigger patterns can help with the stealthiness of the attack. These can be simple patterns such as a single pixel [6] and a black-white checkerboard [1], or more complex patterns such as blending backgrounds [11], natural reﬂections [12], invisible noise [13–16], adversarial patterns [17] and sample-wise patterns [18, 19]. Backdoor attacks can be further divided into two categories: dirty-label attacks [1, 11, 12] and clean-label attacks [20–22, 17, 16]. Clean-label attacks are arguably stealthier as they do not change the labels. Backdoor attackers can also inject backdoors via retraining the victim model on a reverse-engineered dataset without accessing the original training data [23]. Most of these attacks can achieve a high success rate (e.g., > 95%) by poisoning only 10% or even less of the training data. A recent study by Zhao et al.[24] showed that even models trained on clean data can have backdoors, highlighting the importance of anti-backdoor learning.
+Backdoor Defense. Existing backdoor defenses fall under the categories of either detection or erasing methods. Detection methods aim to detect anomalies in input data [7, 6, 25–28] or whether a model is backdoored [4, 5, 29, 30]. These methods typically show promising accuracies; however, the potential impact of backdoor triggers remains uncleared in the backdoored models. On the other hand, erasing methods take a step further and aim to purify the adverse impacts on models caused by the backdoor triggers. The current state-of-the-art erasing methods are Mode Connectivity Repair (MCR) [9], Neural Attention Distillation (NAD) [10] and Adversarial Neuron Pruning (ANP) [31]. MCR mitigates the backdoors by selecting a robust model in the path of loss landscape, NAD leverages attention distillation to erase triggers, while ANP prunes adversarially sensitive neurons to purify the model. Other previous methods, including ﬁnetuning, denoising, and ﬁne-pruning [8], have been shown to be insufﬁcient against the latest attacks [32, 33, 12]. An early work [34] found that DNNs are more accurate on clean samples in an early training stage, while we ﬁnd that the backdoor attacks studied in [34] are only limited to simple BadNets attacks. Thus, it would be interesting to further study the different properties of diverse types of backdoor attacks.
+In this paper, we introduce the concept of anti-backdoor learning. Unlike existing methods, our goal is to train clean models directly on poisoned datasets without further altering the models or the input data. This requires a more in-depth understanding of the distinctive learning behaviors on backdoored data. However, such information is not available in the current literature. Anti-backdoor learning methods may replace the standard training to prevent potential backdoor attacks in real-world scenarios where data sources are not 100% reliable, and the distribution or even the presence of backdoor examples are unknown.
+3 Anti-Backdoor Learning
+In this section, we ﬁrst formulate the Anti-Backdoor Learning (ABL) problem, then reveal the distinctive learning behaviors on clean versus backdoor examples and introduce our proposed ABL method. Here, we focus on classiﬁcation tasks with deep neural networks.
+Defense Setting. We assume the backdoor adversary has pre-generated a set of backdoor examples and has successfully injected these examples into the training dataset. We also assume the defender has full control over the training process but has no prior knowledge of the proportion nor distribution of the backdoor examples in a given dataset. The defender’s goal is to train a model on the given dataset (potentially poisoned) that is as good as models trained on purely clean data. Moreover, if an isolation method is used, the defender may identify only a subset of the backdoor examples. For instance, in the case of 10% poisoning, the isolation rate might only be 1%. Robust learning methods developed under our defense setting could beneﬁt companies, research institutes, government agencies or MLaaS (Machine Learning as a Service) providers to train backdoor-free models on potentially poisoned data. More explanations about our threat model and how our proposed ABL method can help other defense settings can be found in Appendix B.10.
+Problem Formulation. Consider a standard classiﬁcation task with a dataset D = Dc ∪ Db where Dc denotes the subset of clean data and Db denotes the subset of backdoor data. The standard training
+3
+
+trains a DNN model fθ by minimizing the following empirical error:
+
+L = E(x,y)∼D[ (fθ(x), y)] = E(x,y)∼Dc [ (fθ(x), y)] + E(x,y)∼Db [ (fθ(x), y)],
+
+(1)
+
+clean task
+
+backdoor task
+
+where (·) denotes the loss function such as the commonly used cross-entropy loss. The overall learning task is decomposed into two tasks where the ﬁrst clean task is deﬁned on the clean data Dc while the second backdoor task is deﬁned on the backdoor data Db. Since backdoor examples are often associated with a particular target class, all data from Db may share the same class label. The above decomposition indicates that the standard learning approach tends to learn both tasks, resulting in a backdoored model.
+To prevent backdoor examples from being learned, we propose anti-backdoor learning to minimize the following empirical error instead:
+
+L = E(x,y)∼Dc [ (fθ(x), y)] − E(x,y)∼Db [ (fθ(x), y)].
+
+(2)
+
+Note the maximization of the backdoor task is deﬁned on Db. Unfortunately, the above objective is undeﬁned during training since we do not know the Db subset. Intuitively, Db can be detected and isolated during training if the model exhibits an atypical learning behavior on the backdoor examples. In the following subsection, we will introduce one such behavior, which we recognize as the ﬁrst weakness of backdoor attacks.
+
+3.1 Distinctive Learning Behaviors on Backdoor Examples
+We apply 6 classic backdoor attacks including BadNets [1], Trojan [23], Blend [11], Dynamic [18], SIG [35], and CL [21], and 3 feature-space attacks including FC [20], DFST [36], and LBA [32] to poison 10% of CIFAR-10 training data. We train a WideResNet-16-1 model [37] on the corresponding poisoned dataset using the standard training method by solving equation (1) for each attack. Each model is trained following the standard settings (see Section 4 and Appendix A.2). We plot the average training loss (i.e., cross-entropy) on clean versus backdoored training examples in Figure 2. Clearly, for all 9 attacks, the training loss on backdoor examples drops much faster than that on clean examples in the ﬁrst few epochs. Both pixel- and feature-space attacks exhibit this faster-learning pattern consistently, although some feature-space attacks (FC and LBA) can slow down the process to some extent. For all attacks except SIG, FC and LBA, the training loss reaches almost zero after only two epochs of training. Moreover, according to the attack success rate, the stronger the attack is, the faster the training loss on backdoor examples drops. More results on GTSRB and an ImageNet subset can be found in Appendix B.2.
+The above observation indicates that the backdoor task is much easier than the clean task. This is not too surprising. In a typical clean dataset, not all examples are easy examples. Thus, it requires a certain number of training epochs to minimize the loss on those examples, even for small datasets like CIFAR-10. On the contrary, a backdoor attack adds an explicit correlation between the trigger pattern and the target class to simplify and accelerate the injection of the backdoor trigger. We argue that this is a fundamental requirement and also a major weakness of backdoor attacks. For a backdoor attack to work successfully, the trigger(s) should be easily learnable by the model, or else the attack would lose its effectiveness or require a much higher injection rate, which goes against its key objectives. Therefore, the stronger the attack is, the faster the training loss on backdoor examples drops to zero; e.g., compare FC with other attacks in Figure 2. We also show in Figure 6 in Appendix B.1 that the training loss of the backdoor task drops more rapidly as we increase the poisoning rate.
+Based on the above observation, one may wonder if backdoor examples can be easily removed by ﬁltering out the low-loss examples at an early stage (e.g., the 5th epoch). However, we ﬁnd that this strategy is ineffective for two reasons. First, the training loss in Figure 2 is the average training loss which means some backdoor examples can still have high training loss. Additionally, several powerful attacks such as Trojan and Dynamic can still succeed even with very few (50 or 100) backdoor examples. Second, if the training progresses long enough (e.g., beyond epoch 20), many clean examples will also have a low training loss, which makes the ﬁltering signiﬁcantly inaccurate. Therefore, we need a strategy to amplify the difference in training loss between clean and backdoor examples. Moreover, we need to unlearn the backdoor since the backdoor examples can only be identiﬁed when they are learned into the model (i.e., low training loss).
+
+4
+
+Figure 2: The training loss on clean versus backdoor examples crafted by 9 backdoor attacks including BadNets [1], Trojan [23], Blend [11], Dynamic [18], SIG [35], and CL [21], FC [20], DFST [36], and LBA [32]. This experiment is conducted with WideResNet-16-1 [37] on CIFAR-10 under poisoning rate 10%. ASR: attack success rate (on WideResNet-16-1).
+3.2 Proposed Anti-Backdoor Learning Method
+Suppose the total number of training epochs is T , we decompose the entire training process into two stages, i.e., early training and later training. We denote the turning epoch from early training to later training by Tte. Our anti-backdoor learning method consists of two key techniques: 1) backdoor isolation during early training, and 2) backdoor unlearning during later training. The turning epoch is chosen to be the epoch where the average training loss stabilizes at a certain level.
+Backdoor Isolation. During early training, we propose a local gradient ascent (LGA) technique to trap the loss value of each example around a certain threshold γ. We use the loss function LLGA in equation (3) to achieve this. The gradient ascent is said to be “local” because the maximization is performed around a ﬁxed loss value γ. In other words, if the loss of a training example goes below γ, gradient ascent will be activated to boost its loss to γ; otherwise, the loss stays the same. Doing so will force backdoor examples to escape the γ constraint since their loss values drop signiﬁcantly faster. The choice of an appropriate γ lies in the core of this strategy, as an overly large γ will hurt the learning of the clean task, while an overly small γ may not be strong enough to segregate the clean task from the backdoor task. Note that γ can be determined by the strength of potential attacks: stronger attacks only need a smaller γ to isolate. Since most backdoor attacks are strong, the poisoned data can easily reach a small loss value below 0.5. So, we set γ = 0.5 in our experiments and show its consistent performance across different datasets and models in Section 4.2 and Appendix B.5. At the end of early training, we segregate examples into disjoint subsets: p percent of data with the lowest loss values will be isolated into the backdoor set Db (p = |Db|/|D|), and the rest into the clean set Dc (D = Db ∪ Dc). An important note here is that the isolation rate (e.g., p = 1%) is assumed to be much smaller than the poisoning rate (e.g., 10%).
+Backdoor Unlearning. With the clean and backdoor sets, we can then proceed with the later training. Note that at this stage, the backdoor has already been learned by the model. Given the above low isolation rate, an effective backdoor unlearning method is required to make the model unlearn the backdoor with a small subset Db of backdoor examples while simultaneously learning the remaining
+5
+
+(unisolated) backdoor examples in the clean set Dc. We make this possible by exploiting the second weakness of backdoor attacks: the backdoor trigger is usually associated with a particular backdoor target class. We propose to use the loss LGGA deﬁned in equation (2) for this purpose. In LGGA, a global gradient ascent (GGA) is deﬁned on the isolated subset Db. Unlike the local gradient ascent, it is not constrained to be around a ﬁxed loss value. We will show in Section 4.2 that a low isolation rate of 1% is able to effectively unlearn the backdoor against 50% poisoning.
+The loss functions used by our ABL for its two training stages are summarized as follows,
+
+LtABL =
+
+LLGA = E(x,y)∼D sign( (fθ(x), y) − γ) · (fθ(x), y) LGGA = E(x,y)∼Dc (fθ(x), y) − E(x,y)∼Db (fθ(x), y)
+
+if 0 ≤ t < Tte if Tte ≤ t < T ,
+
+(3)
+
+where t ∈ [0, T − 1] is the current training epoch, sign(·) is the sign function, γ is the loss threshold
+for LGA and Db is the isolated backdoor set with the isolation rate p = |Db|/|D|. During early training (0 ≤ t < Tte), the loss will be automatically switched to − (fθ(x), y) if (·) is smaller than γ by the sign function; otherwise the loss stays the same, i.e., (fθ(x), y). Note that LLGA loss may also be achieved by the ﬂooding loss proposed in [38] to prevent overﬁtting: | (fθ(x), y) − b| + b where b is a ﬂooding parameter. We would like to point out that LGA serves only one part of our ABL and can potentially be replaced by other backdoor detection methods. Additionally, we will show that a set of other techniques may also achieve backdoor isolation and unlearning, but they are far less effective than our ABL (see Section 4.3 and Appendix B.3).
+
+4 Experiments
+Attack Conﬁgurations. We consider 10 backdoor attacks in our experiments, including four dirtylabel attacks: BadNets [1], Trojan attack [23], Blend attack [11], Dynamic attack [18], two clean-label attacks: Sinusoidal signal attack(SIG) [35] and Clean-label attack(CL) [21], and four feature-space attacks: Feature collision (FC) [20], Deep Feature Space Trojan Attack (DFST) [24], Latent Backdoor Attack (LBA) [32], and Composite Backdoor Attack (CBA) [39]. We follow the settings suggested by [10] and the open-sourced code corresponding to their original papers to conﬁgure these attack algorithms. All attacks are evaluated on three benchmark datasets, CIFAR-10 [40], GTSRB [41] and an ImageNet subset [42], with two classical model structures including WideResNet (WRN-16-1) [37] and ResNet-34 [43]. No data augmentations are used for these attacks since they hinder the backdoor effect [12]. To keep their original conﬁgurations of dataset and parameter settings, here we only run the four feature-space attacks on CIFAR-10 dataset. We also omit some attacks on GTSRB and ImageNet datasets due to a failure of reproduction following their original papers. The detailed settings of the 10 backdoor attacks are summarized in Table 5 (see Appendix A.2).
+Defense and Training Details. We compare our ABL with three state-of-the-art defense methods: Fine-pruning (FP) [8], Mode Connectivity Repair (MCR) [9], and Neural Attention Distillation (NAD) [10]. For FP, MCR and NAD, we follow the conﬁgurations speciﬁed in their original papers, including the available clean data for ﬁnetuning/repair/distillation and training settings. The comparison with other data isolation methods are shown in Section 4.3. For our ABL, we set T = 100, Tte = 20, γ = 0.5 and an isolation rate p = 0.01 (1%) in all experiments. The exploration of different Tte, γ, and isolation rates p are also provided in Section 4.1. Three data augmentation techniques suggested in [10] including random crop (padding = 4), horizontal ﬂipping, and cutout, are applied for all defense methods. More details on defense settings can be found in Appendix A.3.
+Evaluation Metrics. We adopt two commonly used performance metrics: Attack Success Rate (ASR), which is the classiﬁcation accuracy on the backdoor test set, and Clean Accuracy (CA), the classiﬁcation accuracy on clean test set.
+4.1 Effectiveness of Our ABL Defense
+Comparison to Existing Defenses. Table 1 demonstrates our proposed ABL method on CIFAR-10, GTSRB, and an ImageNet Subset. We consider 10 state-of-the-art backdoor attacks and compare the performance of ABL with three other backdoor defense techniques. It is clear that our ABL achieves the best results on reducing ASR against most of backdoor attacks, while maintaining an extremely high CA across all three datasets. In comparison to the best baseline method NAD, our ABL achieves 12.71% (7.69% vs. 20.40%), 11.90% (7.27% vs. 19.17%), and 7.35% (6.00% vs. 13.35%) lower
+
+6
+
+Table 1: The attack success rate (ASR %) and the clean accuracy (CA %) of 4 backdoor defense methods against 10 backdoor attacks including 6 classic backdoor attacks and 4 feature-space attacks. None means the training data is completely clean.
+
+Dataset
+
+Types
+
+No Defense ASR CA
+
+FP ASR CA
+
+MCR ASR CA
+
+NAD ASR CA
+
+ABL (Ours) ASR CA
+
+None 0% 89.12% 0% 85.14% 0% 87.49% 0% 88.18% 0% 88.41%
+
+BadNets 100% 85.43% 99.98% 82.14% 3.32% 78.49% 3.56% 82.18% 3.04% 86.11%
+
+Trojan 100% 82.14% 66.93% 80.17% 23.88% 76.47% 18.16% 80.23% 3.81% 87.46%
+
+CIFAR-10
+
+Blend Dynamic
+
+100% 100%
+
+84.51% 85.62% 81.33% 31.85% 76.53% 4.56% 82.04% 16.23% 84.06% 83.88% 87.18% 80.37% 26.86% 70.36% 22.50% 74.95% 18.46% 85.34%
+
+SIG 99.46% 84.16% 76.32% 81.12% 0.14% 78.65% 1.92% 82.01% 0.09% 88.27%
+
+CL 99.83% 83.43% 54.95% 81.53% 19.86% 77.36% 16.11% 80.73% 0% 89.03%
+
+FC 88.52% 83.32% 69.89% 80.51% 44.43% 77.57% 58.68% 81.23% 0.08% 82.36%
+
+DFST 99.76% 82.50% 78.11% 80.23% 39.22% 75.34% 35.21% 78.40% 5.33% 79.78%
+
+LBA 99.13% 81.37% 54.43% 79.67% 15.52% 78.51% 10.16% 79.52% 0.06% 80.52%
+
+CBA 90.63% 84.72% 77.33% 79.15% 38.76% 76.36% 33.11% 82.40% 29.81% 84.66%
+
+Average 97.73% 83.55% 75.07% 80.62% 24.38% 76.56% 20.40% 80.37% 7.69% 84.76%
+
+GTSRB
+
+None 0% 97.87% 0% 90.14% 0% 95.49% 0% 95.18% 0% 96.41% BadNets 100% 97.38% 99.57% 88.61% 1.00% 93.45% 0.19% 89.52% 0.03% 96.01% Trojan 99.80% 96.27% 93.54% 84.22% 2.76% 92.98% 0.37% 90.02% 0.36% 94.95%
+Blend 100% 95.97% 99.50% 86.67% 6.83% 92.91% 8.10% 89.37% 24.59% 93.14% Dynamic 100% 97.27% 99.84% 88.38% 64.82% 43.91% 68.71% 76.93% 6.24% 95.80%
+SIG 97.13% 97.13% 79.28% 90.50% 33.98% 91.83% 4.64% 89.36% 5.13% 96.33% Average 99.38% 96.80% 94.35% 87.68% 21.88% 83.01% 19.17% 87.04% 7.27% 95.25%
+
+None 0% 89.93% 0% 83.14% 0% 85.49% 0% 88.18% 0% 88.31% ImageNet BadNets 100% 84.41% 97.70% 82.81% 28.59% 78.52% 6.32% 81.26% 0.94% 87.76%
+Subset Trojan 100% 85.56% 96.39% 80.34% 6.67% 76.87% 15.48% 80.52% 1.47% 88.19% Blend 99.93% 86.15% 99.34% 81.33% 19.23% 75.83% 26.47% 82.39% 21.42% 85.12% SIG 98.60% 86.02% 78.82% 85.72% 25.14% 78.87% 5.15% 83.01% 0.18% 86.42%
+Average 99.63% 85.53% 93.06% 82.55% 19.91% 77.52% 13.35% 81.80% 6.00% 86.87%
+
+average ASR against the 10 attacks on CIFAR-10, GTSRB, and the ImageNet subset, respectively. This superiority becomes more signiﬁcant when compared to other baseline methods.
+We notice that our ABL is not always the best when looking at the 10 attacks individually. For instance, NAD is the best defense against the Blend attack on CIFAR-10 and against the SIG attack on GTSRB, while MCR is the best against Blend on GTSRB and the ImageNet subset. We suspect this is because both Blend and SIG mingle the trigger pattern (i.e., another image or superimposed sinusoidal signal) with the background of the poisoned images, producing an effect of natural artifacts. This makes them harder to be isolated and unlearned, since even clean data can have such patterns [24]. This is one limitation of our ABL that needs to be improved in future works. Our ABL achieves a much better performance than the baselines on defending against the 4 feature-space attacks. For example, NAD only manages to decrease the attack success rates of the FC and the DFST attacks to 58.68% and 35.21%, respectively. In contrast, our ABL can bring their ASRs down to below 10%. The Dynamic and the CBA attacks are found to be the toughest attacks to defend against in general. For example, baseline methods NAD, MCR and FP can only decrease CBA’s ASR to 33.11%, 38.76%, and 77.33% on CIFAR-10, and Dynamic’s ASR to 68.71%, 64.82%, and 99.84% on GTSRB, respectively, a result that is much worse than the 29.81% and 6.24% ASRs of our ABL.
+Maintaining the clean accuracy is as important as reducing the ASR, as the model would lose utility if its clean accuracy is much compromised by the defense. By inspecting the average CA results in Table 1, one can ﬁnd that our ABL achieves nearly the same clean accuracy as models trained on 100% clean (shown in row None and column ‘No Defense’) datasets. Speciﬁcally, our ABL surpasses the average clean accuracy of NAD by 4.39% (84.76% vs. 80.37%), 8.21% (95.25% vs. 87.04%) and 5.07% (86.87% vs. 81.80%) on CIFAR-10, GTSRB, and the ImageNet subset, respectively. FP defense decreases the model’s performance even when training data are clean (the None row). This makes our ABL defense more practical for industrial applications where performance is equally
+7
+
+Attack success rate (%)
+
+100 90 80 70 60 50 40 30 20 10 0 0%
+
+BadNets
+
+Blend
+
+SIG
+
+Trojan
+
+Dynamic
+
+CL
+
+1%
+
+5%
+
+10%
+
+20%
+
+Isolation rate
+
+Clean accuracy (%)
+
+100 90 80 70 60 50 40 30 20 10 0 0%
+
+BadNets
+
+Blend
+
+SIG
+
+Trojan
+
+Dynamic
+
+CL
+
+Zoom In View
+88
+
+83
+
+78
+
+0%
+
+1%
+
+5%
+
+1%
+
+5%
+
+Isolation rate
+
+10%
+
+20%
+
+10%
+
+20%
+
+Figure 3: Performance of our ABL with different isolation rate p ∈ [0.01, 0.2] on CIFAR-10 dataset. Left: attack success rate (ASR); Right: clean accuracy of ABL against 6 classic backdoor attacks.
+
+Training loss
+
+2.5 2.0 1.5 1.0 0.5 0.0 −0.5 −1.0 −1.5
+0
+
+BadNets
+
+Loss on c: γ = 0.5 Loss on c: γ = 1.0 Loss on c: γ = 1.5
+
+Loss on b: γ = 0.5 Loss on b: γ = 1.0 Loss on b: γ = 1.5
+
+5
+
+10
+
+15
+
+20
+
+Epochs
+
+ASR/CA (%)
+
+100 90 80 70 60 50 40 30 20 10 0 0
+
+BadNets
+
+CA: γ = 0.5 CA: γ = 1.0 CA: γ = 1.5
+
+ASR: γ = 0.5 ASR: γ = 1.0 ASR: γ = 1.5
+
+5
+
+10
+
+15
+
+20
+
+Epochs
+
+Figure 4: Separation effect of local gradient ascent with different γ on CIFAR-10 against BadNets. Left: Training loss on the ground truth backdoor (Db) and clean (Dc) subsets; Right: Attack success rate (ASR) and clean accuracy (CA). The gap between the two lines of the same color becomes wider for larger γ, i.e., better separation effect.
+
+important as security. Results of our ABL with 1% isolation against 1% poisoning can be found in Table 10 (Appendix B.9).
+
+Effectiveness with Different Isolation Rates. Here, we study the correlation between the isolation
+rate p = |Db|/|D| and the performance of our ABL, on the CIFAR-10 dataset. We run ABL with different p ∈ [0.01, 0.2] and show attack success rates and clean accuracies in Figure 3. There is a trade-off between ASR reduction and clean accuracy. Speciﬁcally, a high isolation rate can isolate more backdoor examples for the later stage of unlearning, producing a much lower ASR. However, it also puts more examples into the unlearning mode, which harms the clean accuracy. In general, ABL with an isolation rate < 5% works reasonably well against all 6 attacks, even though the backdoor poisoning rate is much higher, i.e., 70% (see Figure 2 in Section 4.2). Along with the results in Table 1, this conﬁrms that it is indeed possible to break and unlearn the backdoor correlation with only a tiny subset of correctly-identiﬁed backdoor examples, highlighting one unique advantage of backdoor isolation and unlearning approaches.
+
+Effectiveness with Different Turning Epochs. Here, we study the impact of the timing to switch from the learning stage (LLGA) to the unlearning stage (LGGA) on CIFAR-10. We compare four different turning epochs: the 10th, 20th, 30th, and 40th epoch, and record the results of our ABL in Table 6 (see Appendix B.4). We ﬁnd that delayed turning epochs tend to slightly hinder the defense performance. Despite the slight variations, all choices of the turning epoch help mitigate backdoor attacks, but epoch 20 (i.e., at 20% - 30% of the entire training progress) achieves the best overall results. This trend is consistent on other datasets as well. We attribute these results to the success of LGA in preserving the difference between clean and backdoor samples over time, which enables us to select the turning epoch ﬂexibly. A more comprehensive discussion on LGA is given in Section 4.2.
+
+4.2 Comprehensive Understanding of ABL
+Importance of Local Gradient Ascent. To help understand how LGA works in isolating backdoor data, we visualize and compare in Figure 4 the training loss and the model’s performances (ASR and CA) under three different settings where γ is set to 0.5, 1.0, and 1.5, respectively. It is evident that LGA can segregate backdoor examples from clean examples to a certain extent under all three settings of γ by preventing the loss of clean examples from converging. Moreover, a larger γ leads to
+
+8
+
+Table 2: Stress testing with poisoning rate up to 50% and 70% for 4 attacks including BadNets, Trojan, Blend, and Dynamic on CIFAR10 dataset.
+
+Poisoning Rate Defense BadNets
+
+Trojan
+
+Blend
+
+Dynamic
+
+ASR ACC ASR ACC ASR ACC ASR ACC
+
+50%
+
+None 100% 75.31% 100% 70.44% 100% 69.49% 100% 66.15%
+
+ABL 4.98% 70.52% 16.11% 68.56% 27.28% 64.19% 25.74% 61.32%
+
+None 100% 74.8% 100% 69.46% 100% 67.32% 100% 66.15% 70%
+ABL 5.02% 70.11% 29.29% 68.79% 62.28% 64.43% 69.36% 62.09%
+
+a wider difference in training loss as well as ASR and CA. However, we note that this may cause training instability, as evidenced by the relatively larger ﬂuctuations with γ = 1.5.
+We also examine the precision of the 1% isolated backdoor set under different γ of 0, 0.5, 1.0, and 1.5 on CIFAR-10, GTSRB, and the ImageNet subset. We use BadNets attack with a poisoning rate 10% and set the turning (isolation) epoch of ABL to 20. We report the isolation precision results in Table 7 (see Appendix B.5). As can be seen, when γ = 0, the detection precision is poor; this indicates that it is tough for the model to tell apart backdoor examples from the clean ones without the LGA, which is foreseeable because the clean training loss is uncontrolled and overlaps with the backdoor training loss. Note that as soon as we set γ > 0, the precision immediately improves on both CIFAR-10 and the ImageNet subset. Additionally, the precision of the isolation task is not sensitive to the change in γ, which again allows the hyperparameter value to be ﬂexibly chosen. In our experiments, γ = 0.5 works reasonably well across different datasets and models.
+In summary, LGD creates and sustains a gap between the training loss of clean and backdoor examples, which plays a vital role in extracting an isolated backdoor set.
+Stress Testing: Fixing 1% Isolation Rate While Increasing Poisoning Rate. Now that we know we can conﬁdently extract a tiny subset of backdoor examples with high purity, the challenge remains whether the extracted set is sufﬁcient for the model to unlearn the backdoor. We demonstrate that our ABL is a stronger method, even under this strenuous setting. Here, we experiment on CIFAR-10 against 4 attacks including BadNets, Trojan, Blend, and Dynamic with poisoning rates up to 50%/70% and show the results in Table 2. We can ﬁnd that even with a high poisoning rate of 50%, our ABL method can still reduce the ASR from 100% to 4.98%, 16.11%, 27.28%, and 25.74% for BadNets, Trojan, Blend, and Dynamic, respectively. Note that ABL will break when the poisoning rate reaches 70%. In this case however, the dataset should not be used to train any models in the ﬁrst place. Overall, ABL remains effective against up to 1) 70% BadNets; and 2) 50% Trojan, Blend, and Dynamic. This ﬁnding is very compelling, considering ABL needs to isolate only 1% of training data. As we mentioned before, this is because the correlation between the backdoor pattern and the target label exposes a weakness of backdoor attacks. Our ABL utilizes the GGA to break this link and achieve defense goals effortlessly.
+4.3 Exploring Alternative Isolation and Unlearning Methods
+Alternative Isolation Methods. In this section, we compare the isolation precision of our ABL with two backdoor detection methods, namely Activation Clustering (AC) [7] and Spectral Signature Analysis (SSA) [6]. The goal is to isolate 1% of training examples into the backdoor set (Db), and we provide in Figure 7 (see Appendix B.3) the precision of these methods alongside our ABL in detecting the 6 backdoor attacks on CIFAR-10 dataset. We ﬁnd that both AC and SS achieve high detection rates on BadNets and Trojan attacks while perform poorly on 4 other attacks. A reasonable explanation is that attacks covering the whole image with complex triggers (e.g., Blend, Dynamic, SIG, and CL) give confusing and unidentiﬁable output representations of either feature activation or spectral signature, making these detection methods ineffective. It is worth mentioning that our ABL is effective against all backdoor attacks with the highest average detection rate. In addition, we ﬁnd that the ﬂooding loss [38] proposed for mitigating overﬁtting is also very effective for backdoor isolation. We also explore a conﬁdence-based isolation with label smoothing (LS), which unfortunately fails on most attacks. More details of these explorations can be found in Figure 8 and 9 in Appendix B.6.
+Alternative Unlearning Methods. Here we explore several other empirical strategies, including image-based, label-based, model-based approaches, to rebuild a clean model on the poisoned data.
+
+9
+
+Table 3: Performance of various unlearning methods against BadNets attack on CIFAR-10.
+
+Backdoor Unlearning Methods Method Type Discard Backdoored After Unlearning Db ASR CA ASR CA
+
+Pixel Noise
+
+Image-based No 100% 85.43% 57.54% 82.33%
+
+Grad Noise
+
+Image-based No 100% 85.43% 47.65% 82.62%
+
+Label Shufﬂing
+
+Label-based No 100% 85.43% 30.23% 83.76%
+
+Label Uniform
+
+Label-based No 100% 85.43% 75.12% 83.47%
+
+Label Smoothing
+
+Label-based No 100% 85.43% 99.80% 83.17%
+
+Self-Learning
+
+Label-based No 100% 85.43% 21.26% 84.38%
+
+Finetuning All Layers Model-based Yes 100% 85.43% 99.12% 83.64%
+
+Finetuning Last Layers Model-based Yes 100% 85.43% 22.33% 77.65%
+
+Finetuning ImageNet Model Model-based Yes 100% 85.43% 12.18% 75.10%
+
+Re-training from Scratch Model-based Yes 100% 85.43% 11.21% 86.02%
+
+ABL
+
+Model-based No 100% 85.43% 3.04% 86.11%
+
+These approaches are motivated by the second weakness of backdoor attacks, and are all designed to break the connection between the trigger pattern and the target class. We experiment on CIFAR-10 with BadNets (10% poisoning rate), and ﬁx the backdoor isolation method to our ABL with a high isolation rate 20% (as most of them will fail with 1% isolation). Table 3 summarizes our explorations. Our core ﬁndings can be summarized as: a) adding perturbations to pixels or gradients is not effective; b) changing the labels of isolated examples is mildly effective; c) ﬁnetuning some (not all) layers of the model cannot effectively mitigate backdoor attacks; d) “self-learning” and “retraining the model from scratch” on the isolated clean set are good choices against backdoor attacks; and e) our ABL presents the best unlearning performance. Details of these methods are given in Appendix A.4. The performance of these methods under the 1% isolation rate is also reported in Table 8 in Appendix B.7. We also considered another widely used attack settings that the user only allowed to access a backdoored model and hold limited benign data. In this case, we proposed to combine our ABL unlearning with Neural Cleanse [4] to erase the backdoroed model (see Appendix B.10).
+5 Conclusion
+In this work, we identiﬁed two inherent characteristics of backdoor attacks as their weaknesses: 1) backdoor examples are easier and faster to learn than clean examples, and 2) backdoor learning establishes a strong correlation between backdoor examples and the target label. Based on these two ﬁndings, we proposed a novel framework - Anti-Backdoor Learning (ABL) - which consists of two stages of learning utilizing local gradient ascent (LGA) and global gradient ascent (GGA), respectively. At the early learning stage, we use LGA to intentionally maximize the training loss gap between clean and backdoor examples to isolate out the backdoored data via the low loss value. We use GGA to unlearn the backdoored model with the isolated backdoor data at the last learning stage. Empirical results demonstrate that our ABL is resilient to various experimental settings and can effectively defend against 10 state-of-the-art backdoor attacks. Our work introduces a simple but very effective ABL method for industries to train backdoor-free models on real-world datasets, and opens up an interesting research direction for robust and secure machine learning.
+
+Broader Impact
+Large-scale data have been key to the success of deep learning. However, it is hard to guarantee the quality and purity of the training data in many cases, and even high-quality datasets may contain backdoors, especially those collected from the internet. By introducing the concept of anti-backdoor learning (ABL), our work opens up a new direction for secure and robust learning with not-fullytrusted data. Even in the clean setting, ABL can prevent deep learning models from overﬁtting to those overly easy samples. Beyond backdoor defense, ABL could be explored as a generic data-quality-ware learning mechanism in place of the traditional data-quality-agnostic learning. Such a mechanism may help reduce many potential data-quality-related risks such as memorization, overﬁtting, backdoors and biases. Although not our initial intention, our work may adversely be exploited to develop advanced backdoor attacks. This essentially requires new defenses to combat.
+
+10
+
+Acknowledgement
+This work is supported by China National Science Foundation under grant number 62072356 and in part by the Key Research and Development Program of Shaanxi under Grant 2019ZDLGY12-08.
+References
+[1] Tianyu Gu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Identifying vulnerabilities in the machine learning model supply chain. arXiv preprint arXiv:1708.06733, 2017.
+[2] Cheng-Hsin Weng, Yan-Ting Lee, and Shan-Hung Brandon Wu. On the trade-off between adversarial and backdoor robustness. In NeurIPS, 2020.
+[3] Yiming Li, Baoyuan Wu, Yong Jiang, Zhifeng Li, and Shu-Tao Xia. Backdoor learning: A survey. arXiv preprint arXiv:2007.08745, 2020.
+[4] Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y Zhao. Neural cleanse: Identifying and mitigating backdoor attacks in neural networks. In S&P. IEEE, 2019.
+[5] Huili Chen, Cheng Fu, Jishen Zhao, and Farinaz Koushanfar. Deepinspect: A black-box trojan detection and mitigation framework for deep neural networks. In IJCAI, 2019.
+[6] Brandon Tran, Jerry Li, and Aleksander Madry. Spectral signatures in backdoor attacks. In NeurIPS, 2018.
+[7] Bryant Chen, Wilka Carvalho, Nathalie Baracaldo, Heiko Ludwig, Benjamin Edwards, Taesung Lee, Ian Molloy, and Biplav Srivastava. Detecting backdoor attacks on deep neural networks by activation clustering. In AAAI Workshop, 2019.
+[8] Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. Fine-pruning: Defending against backdooring attacks on deep neural networks. In RAID, 2018.
+[9] Pu Zhao, Pin-Yu Chen, Payel Das, Karthikeyan Natesan Ramamurthy, and Xue Lin. Bridging mode connectivity in loss landscapes and adversarial robustness. In ICLR, 2020.
+[10] Yige Li, Xixiang Lyu, Nodens Koren, Lingjuan Lyu, Bo Li, and Xingjun Ma. Neural attention distillation: Erasing backdoor triggers from deep neural networks. In ICLR, 2021.
+[11] Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep learning systems using data poisoning. arXiv preprint arXiv:1712.05526, 2017.
+[12] Yunfei Liu, Xingjun Ma, James Bailey, and Feng Lu. Reﬂection backdoor: A natural backdoor attack on deep neural networks. In ECCV, 2020.
+[13] Cong Liao, Haoti Zhong, Anna Squicciarini, Sencun Zhu, and David Miller. Backdoor embedding in convolutional neural network models via invisible perturbation. CODASPY, 2020.
+[14] Shaofeng Li, Minhui Xue, Benjamin Zi Hao Zhao, Haojin Zhu, and Xinpeng Zhang. Invisible backdoor attacks on deep neural networks via steganography and regularization. arXiv preprint arXiv:1909.02742, 2019.
+[15] Jinyin Chen, Haibin Zheng, Mengmeng Su, Tianyu Du, Changting Lin, and Shouling Ji. Invisible poisoning: Highly stealthy targeted poisoning attack. In ICISC, 2019.
+[16] Aniruddha Saha, Akshayvarun Subramanya, and Hamed Pirsiavash. Hidden trigger backdoor attacks. In AAAI, volume 34, pages 11957–11965, 2020.
+[17] Shihao Zhao, Xingjun Ma, Xiang Zheng, James Bailey, Jingjing Chen, and Yu-Gang Jiang. Clean-label backdoor attacks on video recognition models. In CVPR, pages 14443–14452, 2020.
+[18] Anh Nguyen and Anh Tran. Input-aware dynamic backdoor attack. In NeurIPS, 2020.
+11
+
+[19] Yuezun Li, Yiming Li, Baoyuan Wu, Longkang Li, Ran He, and Siwei Lyu. Invisible backdoor attack with sample-speciﬁc triggers. In ICCV, pages 16463–16472, 2021.
+[20] Ali Shafahi, W Ronny Huang, Mahyar Najibi, Octavian Suciu, Christoph Studer, Tudor Dumitras, and Tom Goldstein. Poison frogs! targeted clean-label poisoning attacks on neural networks. In NeurIPS, 2018.
+[21] Alexander Turner, Dimitris Tsipras, and Aleksander Madry. Clean-label backdoor attacks. https://people.csail.mit.edu/madry/lab/, 2019.
+[22] Chen Zhu, W Ronny Huang, Hengduo Li, Gavin Taylor, Christoph Studer, and Tom Goldstein. Transferable clean-label poisoning attacks on deep neural nets. In ICML, pages 7614–7623. PMLR, 2019.
+[23] Yingqi Liu, Shiqing Ma, Yousra Aafer, Wen-Chuan Lee, Juan Zhai, Weihang Wang, and Xiangyu Zhang. Trojaning attack on neural networks. In NDSS, 2018.
+[24] Shihao Zhao, Xingjun Ma, Yisen Wang, James Bailey, Bo Li, and Yu-Gang Jiang. What do deep nets learn? class-wise patterns revealed in the input space. arXiv preprint arXiv:2101.06898, 2021.
+[25] Yansong Gao, Change Xu, Derui Wang, Shiping Chen, Damith C Ranasinghe, and Surya Nepal. Strip: A defence against trojan attacks on deep neural networks. In ACSAC, 2019.
+[26] Xiaojun Xu, Qi Wang, Huichen Li, Nikita Borisov, Carl A Gunter, and Bo Li. Detecting ai trojans using meta neural analysis. In S&P, 2021.
+[27] Jonathan Hayase, Weihao Kong, Raghav Somani, and Sewoong Oh. Spectre: Defending against backdoor attacks using robust statistics. In ICML, 2021.
+[28] Di Tang, XiaoFeng Wang, Haixu Tang, and Kehuan Zhang. Demon in the variant: Statistical analysis of dnns for robust backdoor contamination detection. In USENIX Security, 2021.
+[29] Soheil Kolouri, Aniruddha Saha, Hamed Pirsiavash, and Heiko Hoffmann. Universal litmus patterns: Revealing backdoor attacks in cnns. In CVPR, 2020.
+[30] Guangyu Shen, Yingqi Liu, Guanhong Tao, Shengwei An, Qiuling Xu, Siyuan Cheng, Shiqing Ma, and Xiangyu Zhang. Backdoor scanning for deep neural networks through k-arm optimization. In ICML, 2021.
+[31] Dongxian Wu and Yisen Wang. Adversarial neuron pruning puriﬁes backdoored deep models. NeurIPS, 2021.
+[32] Yuanshun Yao, Huiying Li, Haitao Zheng, and Ben Y Zhao. Latent backdoor attacks on deep neural networks. In CCS, 2019.
+[33] Yiming Li, Tongqing Zhai, Baoyuan Wu, Yong Jiang, Zhifeng Li, and Shutao Xia. Rethinking the trigger of backdoor attack. arXiv preprint arXiv:2004.04692, 2020.
+[34] Yanyao Shen and Sujay Sanghavi. Learning with bad training data via iterative trimmed loss minimization. In ICML, 2019.
+[35] Mauro Barni, Kassem Kallas, and Benedetta Tondi. A new backdoor attack in cnns by training set corruption without label poisoning. In ICIP, 2019.
+[36] Siyuan Cheng, Yingqi Liu, Shiqing Ma, and Xiangyu Zhang. Deep feature space trojan attack of neural networks by controlled detoxiﬁcation. In AAAI, 2021.
+[37] Sergey Zagoruyko and Nikos Komodakis. Wide residual networks. In BMVC, 2016.
+[38] Takashi Ishida, Ikko Yamane, Tomoya Sakai, Gang Niu, and Masashi Sugiyama. Do we need zero training loss after achieving zero training error? In ICML, 2020.
+[39] Junyu Lin, Lei Xu, Yingqi Liu, and Xiangyu Zhang. Composite backdoor attack for deep neural network by mixing existing benign features. In CCS, 2020.
+12
+
+[40] Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009.
+[41] Johannes Stallkamp, Marc Schlipsing, Jan Salmen, and Christian Igel. Man vs. computer: Benchmarking machine learning algorithms for trafﬁc sign recognition. Neural networks, 32:323–332, 2012.
+[42] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In CVPR, 2009.
+[43] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In CVPR, 2016.
+[44] Chulin Xie, Keli Huang, Pin-Yu Chen, and Bo Li. Dba: Distributed backdoor attacks against federated learning. In ICLR, 2019.
+[45] Lingjuan Lyu, Han Yu, Xingjun Ma, Lichao Sun, Jun Zhao, Qiang Yang, and Philip S Yu. Privacy and robustness in federated learning: Attacks and defenses. arXiv preprint arXiv:2012.06337, 2020.
+13
+
+A Implementation Details
+
+A.1 Datasets and Classiﬁers The datasets and DNN models used in our experiments are summarized in Table 4.
+
+Table 4: Detailed information of the datasets and classiﬁers used in our experiments.
+
+Dataset CIFAR-10 GTSRB ImageNet subset
+
+Labels 10 43 12
+
+Input Size 32 x 32 x 3 32 x 32 x 3 224 x 224 x 3
+
+Training Images 50000 39252 12406
+
+Classiﬁer WideResNet-16-1 WideResNet-16-1
+ResNet-34
+
+A.2 Attack Details
+
+We trained backdoored model for 100 epochs using Stochastic Gradient Descent (SGD) with an initial learning rate of 0.1 on CIFAR-10 and the ImageNet subset (0.01 on GTSRB), a weight decay of 10−4, and a momentum of 0.9. The learning rate was divided by 10 at the 20th and the 70th epochs. The target labels of backdoor attacks were set to 0 for CIFAR-10 and ImageNet, and 1 for GTSRB. Note that the implementation of the Dynamic attack proposed in the original paper is different from the traditional settings of data poisoning. We used their pre-trained generator model to create a poisoned training dataset to train the backdoored model on. We did not use any data augmentation techniques to avoid side-effects on the ASR. The details of backdoor triggers are summarized in Table 5.
+
+Table 5: Attack settings of 6 backdoor attacks. ASR: attack success rate; CA: clean accuracy.
+
+Attacks BadNets Trojan
+Blend Dynamic
+SIG CL FC DFST LBA CBA
+
+Trigger Type Fixed Fixed Fixed Varied Fixed Fixed Fixed Fixed Fixed Varied
+
+Trigger Pattern Grid
+Reversed Watermark Random Pixel Mask Generator
+Sinusoidal Signal Grid and PGD Noise Optimization-based
+Style Generator Optimization-based Mixer Construction
+
+Target Label 0, 1 0, 1 0, 1 0, 1 0, 1 0, 1
+source 1, target 0 0 0 0
+
+Poisoning Rate 10% 10% 10% 10% 10% 10% 10% 10% 10% 10%
+
+A.3 Defense Details
+For Fine-pruning (FP)*, we pruned the last convolutional layer of the model until the CA of the network became lower than that of the other defense baselines. For model connectivity repair (MCR)†, we trained the loss curve for 100 epochs using the backdoored model as an endpoint and evaluated the defense performance of the model on the loss curve. We adopted the open-source code‡ used in NAD and ﬁnetuned the backdoored student network for 10 epochs with 5% of clean data. The distillation parameter β for CIFAR-10 was set to be identical to the value given in the original paper. We cautiously selected the β value for GTSRB and ImageNet to achieve the best trade-off erasing results between ASR and CA. All these defense methods were trained using the same data augmentation techniques, i.e., random crop (padding = 4), horizontal ﬂipping, and Cutout (1 patch with 9 length).
+For our ABL defense, we trained the model for 20 epochs with a learning rate of 0.1 on CIFAR-10 and ImageNet subset (0.01 on GTSRB) before the turning epoch. After isolating 1% of potential backdoor examples, we further trained the model for 60 epochs on the full training dataset (this helps recover the model’s clean accuracy), and in the last 20 epochs, we trained the model using the LGGA loss with the 1% isolated backdoor examples and a learning rate of 0.0001. Note that for ABL, the
+*https://github.com/kangliucn/Fine-pruning-defense †https://github.com/IBM/model-sanitization/tree/master/backdoor/backdoor-cifar ‡https://github.com/bboylyg/NAD
+14
+
+data augmentations are only used for the mid-stage of 60 epochs, which can help improve clean accuracy. All experiments were run on a hardware equipped with a RTX 3080 GPU and an i7 9700K CPU.
+A.4 Details of Alternative Isolation and Unlearning Methods
+For the two explored isolation methods, i.e., the ﬂooding loss and the label smoothing, we set the ﬂooding level to 0.5 and the smoothing value to 0.2 and 0.4, respectively. The explored unlearning methods are deﬁned as follows:
+• Pixel Noise. This method randomly adds Gaussian noise to Db then trains the model on the resulting dataset Db∗ ∪ Dc.
+• Grad Noise. This method adds Gaussian noise to Db at the quarter quantile with the largest gradient then trains the model on the resulting dataset Db∗ ∪ Dc.
+• Label Shufﬂing. This method applies a random permutation on the labels of examples from Db then trains the model on the resulting dataset Db∗ ∪ Dc.
+• Label Uniform. This method corrupts the labels in Db with an uniform random class then trains the model on the resulting dataset Db∗ ∪ Dc.
+• Label Smoothing. This method decreases the conﬁdence of the original one-hot labels in the Db then trains the model on the resulting dataset Db∗ ∪ Dc.
+• Self-learning. This method relabels Db with the model trained from scratch on Dc, then trains the model on the resulting dataset Db∗ ∪ Dc.
+• Finetuning All Layers. This method ﬁnetunes all layers of the backdoored model on Dc. • Finetuning Last Layers. This method ﬁnetunes the last ﬂatten layer of the backdoored model on
+Dc. • Finetuning ImageNet Model. This method ﬁnetunes the last block of a pre-trained ImageNet
+model (i.e., Resnet-34) on Dc. • Re-training from Scratch. This method retrains a model from scratch on Dc.
+A.5 Examples of Backdoor Triggers
+Figure 5 shows some backdoor examples used in our experiments.
+B More Experimental Results
+B.1 Training Loss under Different Poisoning Rates
+Figure 6 shows the training loss for the BadNets attack under three different poisoning rates, i.e., 1%, 5%, and 10%. It is evident that the higher the poisoning rate, the faster the training loss declines on backdoor examples.
+B.2 Training Loss on More Datasets
+Figure 10 show the results of the training loss on both clean and backdoor examples on GTSRB and ImageNet subset.
+B.3 Comparison of training data detection
+We compared our ABL to two state-of-the-art backdoor data detection methods: Activation Cluster (AC) and Spectral Signature Analysis (SSA). We reproduce these two methods using the open source
+15
+
+BadNets
+
+Trojan
+
+Blend
+
+Dynamic
+
+SIG
+
+CL
+
+CIFAR-10
+
+GTSRB
+
+ImageNet subset
+Figure 5: Backdoored images by different attacks for CIFAR-10, GTSRB, and ImageNet.
+
+Training loss
+
+2.5 2.0 1.5 1.0 0.5 0.0
+0
+
+BadNets
+None (ASR: 0%) BadNets-1% (ASR: 100%) BadNets-5% (ASR: 100%) BadNets-10% (ASR: 100%)
+
+5
+
+10
+
+15
+
+20
+
+25
+
+30
+
+Epochs
+
+Detection rate (%)
+
+100
+
+90
+
+80
+
+70
+
+60
+
+50
+
+Activation cluster
+
+Spectral analysis
+
+ABL (Ours)
+
+40
+
+30
+
+20
+
+10
+
+0
+
+BadNets Trojan Blend Dynamic SIG
+
+CL
+
+Figure 6: Training loss of BadNets with poisoning Figure 7: Detection precision (T P/(T P + F P ))
+
+rates of 1%, 5%, and 10% on CIFAR-10.
+
+of the 1% isolated backdoor examples by our ABL
+
+and two other state-of-the-art backdoor detection
+
+methods: Activation Cluster (AC) and Spectral
+
+Signature Analysis (SSA).
+
+Attack success rate (%)
+
+100
+
+90
+
+80
+
+70
+
+60
+
+50
+
+Baseline
+
+Flooding loss
+
+40
+
+30
+
+20
+
+10
+
+0 BadNets
+
+Trojan
+
+Blend
+
+ABL (Ours) Dynamic
+
+Clean accuracy (%)
+
+100
+
+90
+
+80
+
+70
+
+60
+
+50
+
+Baseline
+
+Flooding loss
+
+40
+
+30
+
+20
+
+10
+
+0 BadNets
+
+Trojan
+
+Blend
+
+ABL (Ours) Dynamic
+
+Figure 8: Performance of ﬂooding loss based isolation against 4 backdoor attacks on CIFAR-10.
+
+16
+
+Attack success rate (%)
+
+100
+
+90
+
+80
+
+70
+
+60
+
+50
+
+Baseline
+
+Label smoothing
+
+40
+
+30
+
+20
+
+10
+
+0 BadNets
+
+Trojan
+
+Blend
+
+ABL (Ours) Dynamic
+
+Clean accuracy (%)
+
+100
+
+90
+
+80
+
+70
+
+60
+
+50
+
+Baseline
+
+Label smoothing
+
+40
+
+30
+
+20
+
+10
+
+0 BadNets
+
+Trojan
+
+Blend
+
+ABL (Ours) Dynamic
+
+Figure 9: Performance of label smoothing based isolation against 4 backdoor attacks on CIFAR-10.
+
+Training loss
+
+GTSRB 2.5
+
+Clean examples
+
+Backdoor examples
+
+2.0
+
+1.5
+
+1.0
+
+0.5
+
+0.0 0123456789 Epochs
+(a) BadNets(ASR: 100%)
+
+Training loss
+
+GTSRB 2.5
+
+Clean examples
+
+Backdoor examples
+
+2.0
+
+1.5
+
+1.0
+
+0.5
+
+0.0 0123456789 Epochs
+(b) Trojan(ASR: 99.80%)
+
+Training loss
+
+GTSRB 2.5
+
+Clean examples
+
+Backdoor examples
+
+2.0
+
+1.5
+
+1.0
+
+0.5
+
+0.0 0123456789 Epochs
+(c) Blend(ASR: 100%)
+
+ImageNet Subset 2.5
+
+Clean examples
+
+Backdoor examples
+
+2.0
+
+ImageNet Subset 2.5
+
+Clean examples
+
+Backdoor examples
+
+2.0
+
+ImageNet Subset 2.5
+
+Clean examples
+
+Backdoor examples
+
+2.0
+
+Training loss
+
+Training loss
+
+Training loss
+
+1.5
+
+1.5
+
+1.5
+
+1.0
+
+1.0
+
+1.0
+
+0.5
+
+0.5
+
+0.5
+
+0.0 0123456789 Epochs
+
+0.0 0123456789 Epochs
+
+0.0 0123456789 Epochs
+
+(d) BadNets(ASR: 100%)
+
+(e) Trojan(ASR: 100%)
+
+(f) Blend(ASR: 99.93%)
+
+Figure 10: The training loss of ResNet models on GTSRB (top row) and the ImageNet subset (bottom row) under a poisoning rate 10%. WideResNet-16-1/ResNet-34 are used for GTSRB/the ImageNet subset, respectively. ASR: attack success rate. Here, we only tested 3 classic attacks: BadNets, Trojan, and Blend.
+
+code§ following the default settings suggested in their papers. As can be seen in Figure 7, our ABL defense achieves the best detection precision against all 6 backdoor attacks on the CIFAR-10 dataset.
+
+B.4 Results of Tuning Epochs
+
+Table 6 shows the performance of our ABL under four different turning epochs: the 10th, the 20th, the 30th, and the 40th. The best turning epoch is epoch 20 (20% - 30% of the entire training process) with the best defense results.
+
+Table 6: Performance of our ABL with different tuning epochs on CIFAR-10. The isolation rate for ABL is set to 1% while the poisoning rate of the 4 attacks is 10%.
+
+Tuning Epoch
+10 20 30 40
+
+BadNets
+
+ASR
+
+CA
+
+1.12% 85.30%
+
+3.04% 86.11%
+
+3.22% 85.60%
+
+4.05% 84.28%
+
+Trojan
+
+ASR
+
+CA
+
+5.04% 85.12%
+
+3.66% 87.46%
+
+3.81% 87.25%
+
+4.96% 85.14%
+
+Blend
+
+ASR
+
+CA
+
+16.34% 84.22%
+
+16.23% 84.06%
+
+19.87% 83.83%
+
+18.78% 81.53%
+
+Dynamic
+
+ASR
+
+CA
+
+25.33% 84.12%
+
+18.46% 85.34%
+
+20.56% 85.23%
+
+19.15% 83.44
+
+§https://github.com/ain-soph/trojanzoo 17
+
+B.5 Results of Detection Rate under different γ
+Table 7 shows the isolation performances under four different values of γ. We use BadNets with a poisoning rate 10% as an example attack and run experiments with our ABL on CIFAR-10, GTSRB, and the ImageNet subset. Table 7 shows the precision of the 1% isolation of backdoor examples. The isolation is executed at the end of the 20th training epoch with (γ ≥ 0.5) or without (γ = 0) our LGA. As the table indicates, the isolation precison is extremely low if LGA is not used. Once we select a γ ≥ 0.5, the precision immediately goes up to 100%, meaning all the isolated backdoor examples are true backdoor examples. Arguably, adaptive attacks could enforce large loss values to circumvent our loss threshold γ. Until now however, it is not clear in the current literature how to design such attacks without manipulating the training procedure. We will leave this question as future work.
+
+Table 7: Detection precision (T P/(T P + F P )) of the 1% isolated examples under different γ, using BadNets as an example attack.
+
+Dataset CIAFR-10
+GTSRB ImageNet Subset
+
+γ=0 26% 89% 21%
+
+γ = 0.5 100% 100% 100%
+
+γ = 1.0 100% 100% 100%
+
+γ = 1.5 100% 100% 100%
+
+B.6 Results of Alternative Backdoor Isolation Methods
+The ﬂooding loss [38] is a regularization technique to improve model generalization by avoiding zero training loss. Here, we replace our local gradient ascent (LGA) by the ﬂooding loss to isolate potential backdoored data while ﬁxing the unlearning method to our global gradient ascent (GGA). Note the ﬂooding level is set to 0.5. Figure 8 compares the results of ﬂooding loss based defense to our ABL defense. We ﬁnd that the two methods achieve a similar performance against 4 backdoor attacks on CIFAR-10. This indicates that the ﬂooding loss is also capable of isolating backdoored data, which may be an unexpected beneﬁt of overﬁtting-mitigation techniques. Our LGA outperforms the ﬂooding loss against the Blend and the Dynamic attacks in terms of reducing the attack success rate, though only mildly. We would like to point out that LGA serves only one part of our ABL and can potentially be replaced by any backdoor detection methods, and the effectiveness of GLA with 1% of isolated data is also a key to the success of ABL.
+As label smoothing (LS) can also alleviate the overconﬁdence output of the deep networks, we also try to train a model using LS to isolate the examples with higher output conﬁdence levels (often refer to backdoor examples). The comparison results are shown in Figure 9. Unfortunately, we ﬁnd that LS-based defense achieves much poorer ASR performance against the Dynamic, the Trojan, and the Blend attacks, even with the smoothing value set to 0.4. This might be caused by the similar conﬁdence distribution between clean and backdoor examples.
+B.7 Results of Alternative Backdoor Unlearning Methods
+Here, we report the unlearning results of the set of explored unlearning methods under the isolation rate p = 0.01 (1%). The results are shown in Table 8. It shows that all these unlearning methods except for our ABL failed to defend against any backdoor attack, with the 100% ASR almost unchanged. This may be caused by the high ratio of backdoored data (9%) remaining in the potential clean set Dc.
+B.8 Results of Computational Complexity for ABL
+Here, we report the time cost of the isolation operation of our ABL on CIFAR-10 and the ImageNet subset in Table 9. The additional computational cost is less than 10% and 3% of the standard training time on CIFAR-10 (∼ 40 minutes for 100 epochs) and the ImageNet subset (∼ 80 minutes for 100 epochs), respectively.
+18
+
+Table 8: Performance of various unlearning methods against the BadNets attack on CIFAR-10 under the 1% isolation rate by our ABL.
+
+Backdoor Unlearning Methods
+Pixel Noise Grad Noise Label Shufﬂing Label Uniform Label Smoothing Self-Learning Finetuning All Layers Finetuning Last Layers Finetuning ImageNet Model Re-traing from Scratch ABL (Ours)
+
+Method Type
+Image-based Image-based Label-based Label-based Label-based Label-based Model-based Model-based Model-based Model-based Model-based
+
+Discard
+Db No No No No No No Yes Yes Yes Yes No
+
+Backdoored ASR CA 100% 85.43% 100% 85.43% 100% 85.43% 100% 85.43% 100% 85.43% 100% 85.43% 100% 85.43% 100% 85.43% 100% 85.43% 100% 85.43% 100% 85.43%
+
+After Unlearning
+
+ASR
+
+CA
+
+100% 84.72%
+
+100% 84.63%
+
+99.98% 82.76%
+
+99.92% 83.47%
+
+100% 84.71%
+
+100% 83.91%
+
+100% 85.02%
+
+100% 67.32%
+
+100% 73.43%
+
+100% 85.24%
+
+3.04% 86.11%
+
+Table 9: The average time (second) of the isolation operation of ABL on CIFAR10 and the ImageNet subset; CPU: Intel(R) Core(TM) i5-9400F CPU @ 2.90GHz 2.90 GHz); GPU: 1 NVIDIA GeForce RTX 1080 TI.
+
+Time Cost
+BadNets Trojan Blend
+SIG
+
+CIFAR-10 Data Size: 50,000
+∼230 s ∼228 s ∼232 s ∼228 s
+
+ImageNet subset Data Size: 12,480
+∼140 s ∼140 s ∼138 s ∼136 s
+
+B.9 Results of ABL Defense under Low Poisoning Rate (1%)
+Table 10 shows the results of ABL with 1% isolated data against the 1% poisoning rate on CIFAR-10 with WRN-16-1. Compared to the 10% poisoning results in Table 1, ABL achieved more ASR reduction with similar clean ACC against 1% poisoning, as expected.
+
+Table 10: ABL unlearning with 1% isolated data against 1% poisoning rate on CIFAR-10.
+
+Poisoning Rate 1% BadNets Trojan
+
+Blend Dynamic
+
+SIG
+
+CL
+
+ASR ACC ASR ACC ASR ACC ASR ACC ASR ACC ASR ACC
+
+Baseline 99.52 85.56 97.11 83.46 99.48 83.32 99.87 82.15 62.13 84.01 54.39 83.78
+
+ABL (Ours) 3.01 88.13 3.16 87.56 8.58 84.43 13.36 85.09 0.01 88.78 0 88.54
+
+Table 11: ABL can help unlearn the backdoors from backdoored models on CIFAR-10. ABL unlearning was applied on 500 trigger patterns reverse-engineered by Neural Cleanse (NC) based on 500 clean training images.
+
+Defense
+Baseline NC + ABL Unlearning (Ours)
+
+BadNets ASR ACC 100 85.43 0.12 85.38
+
+Trojan ASR ACC 100 82.14 5.33 79.78
+
+Blend ASR ACC 100 84.51 1.17 83.11
+
+SIG ASR ACC 100 84.16 3.21 80.53
+
+B.10 ABL Unlearning Combined with Neural Cleanse
+The threat models of backdoor attacks are mainly classiﬁed into three types: a) poisoning the training data [1, 11, 23], b) poisoning the training data and manipulating the training procedure [18, 36, 32], or c) directly modifying parameters of the ﬁnal model [23]. Our threat model refers to the threat model a), which is one of the widely accepted threat models for backdoor attacks. Different defense settings beneﬁt different types of users (defenders). Particularly, defenses developed under our threat model could beneﬁt companies, research institutes, or government agencies who have the resources
+19
+
+to train their own models but rely on outsourced training data. It also beneﬁts MLaaS (Machine Learning as a Service) providers such as Amazon ML and SageMaker, Microsoft Azure AI Platform, Google AI Platform and IBM Watson Machine Learning to help users train backdoor-free machine learning models. Note that our focus is the traditional machine learning paradigm with a single dataset and model. Backdoor attacks on federate learning (FL) follow a different setting thus require different defense strategies [44, 45]. Here, we show that our ABL method can also help other defense settings, where the defender can only purify a backdoored model with a small subset of clean data (e.g., only 1% clean training data is available). In this case, ABL can leverage existing trigger pattern detection methods like Neural Cleanse [4] to reverse engineer a set of trigger patterns, then unlearn the backdoor from the model via its maximization term (deﬁned on the reverse-engineered trigger patterns and their predicted labels). Table 11 shows the effectiveness of this simple approach. ABL can effectively and effortlessly unlearn the trigger from a backdoored model with the reversed trigger patterns. This demonstrates the usefulness of our ABL in purifying backdoored models, closing the gap between backdoor detection and backdoor erasing. B.11 Visualization of the Isolated Backdoor Examples Figure 11 and Figure 12 show a few examples of those isolated backdoor images under the BadNets attack on CIFAR-10, with or without our ABL isolation.
+Figure 11: Backdoor images isolated without our ABL (γ = 0) under the BadNets attack on CIFAR-10.
+Figure 12: Backdoor images isolated with our ABL (γ = 0.5) under the BadNets attack on CIFAR-10.
+20
+

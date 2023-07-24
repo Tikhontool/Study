@@ -1,0 +1,84 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2209.05244
+
+Help | Advanced Search
+Search
+Computer Science > Computer Vision and Pattern Recognition
+(cs)
+[Submitted on 12 Sep 2022 ( v1 ), last revised 7 Dec 2022 (this version, v3)]
+Title: Universal Backdoor Attacks Detection via Adaptive Adversarial Probe
+Authors: Yuhang Wang , Huafeng Shi , Rui Min , Ruijia Wu , Siyuan Liang , Yichao Wu , Ding Liang , Aishan Liu
+Download a PDF of the paper titled Universal Backdoor Attacks Detection via Adaptive Adversarial Probe, by Yuhang Wang and 6 other authors
+Download PDF
+
+    Abstract: Extensive evidence has demonstrated that deep neural networks (DNNs) are vulnerable to backdoor attacks, which motivates the development of backdoor attacks detection. Most detection methods are designed to verify whether a model is infected with presumed types of backdoor attacks, yet the adversary is likely to generate diverse backdoor attacks in practice that are unforeseen to defenders, which challenge current detection strategies. In this paper, we focus on this more challenging scenario and propose a universal backdoor attacks detection method named Adaptive Adversarial Probe (A2P). Specifically, we posit that the challenge of universal backdoor attacks detection lies in the fact that different backdoor attacks often exhibit diverse characteristics in trigger patterns (i.e., sizes and transparencies). Therefore, our A2P adopts a global-to-local probing framework, which adversarially probes images with adaptive regions/budgets to fit various backdoor triggers of different sizes/transparencies. Regarding the probing region, we propose the attention-guided region generation strategy that generates region proposals with different sizes/locations based on the attention of the target model, since trigger regions often manifest higher model activation. Considering the attack budget, we introduce the box-to-sparsity scheduling that iteratively increases the perturbation budget from box to sparse constraint, so that we could better activate different latent backdoors with different transparencies. Extensive experiments on multiple datasets (CIFAR-10, GTSRB, Tiny-ImageNet) demonstrate that our method outperforms state-of-the-art baselines by large margins (+12%). 
+
+Comments: 	8 pages, 8 figures
+Subjects: 	Computer Vision and Pattern Recognition (cs.CV) ; Cryptography and Security (cs.CR)
+Cite as: 	arXiv:2209.05244 [cs.CV]
+  	(or arXiv:2209.05244v3 [cs.CV] for this version)
+  	https://doi.org/10.48550/arXiv.2209.05244
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Yuhang Wang [ view email ]
+[v1] Mon, 12 Sep 2022 13:37:06 UTC (7,199 KB)
+[v2] Tue, 13 Sep 2022 06:40:24 UTC (7,199 KB)
+[v3] Wed, 7 Dec 2022 15:45:20 UTC (3,840 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Universal Backdoor Attacks Detection via Adaptive Adversarial Probe, by Yuhang Wang and 6 other authors
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.CV
+< prev   |   next >
+new | recent | 2209
+Change to browse by:
+cs
+cs.CR
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

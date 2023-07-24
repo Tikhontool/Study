@@ -1,0 +1,85 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2209.11715
+
+Help | Advanced Search
+Search
+Computer Science > Cryptography and Security
+(cs)
+[Submitted on 23 Sep 2022 ( v1 ), last revised 19 Dec 2022 (this version, v3)]
+Title: The "Beatrix'' Resurrections: Robust Backdoor Detection via Gram Matrices
+Authors: Wanlun Ma , Derui Wang , Ruoxi Sun , Minhui Xue , Sheng Wen , Yang Xiang
+Download a PDF of the paper titled The "Beatrix'' Resurrections: Robust Backdoor Detection via Gram Matrices, by Wanlun Ma and 4 other authors
+Download PDF
+
+    Abstract: Deep Neural Networks (DNNs) are susceptible to backdoor attacks during training. The model corrupted in this way functions normally, but when triggered by certain patterns in the input, produces a predefined target label. Existing defenses usually rely on the assumption of the universal backdoor setting in which poisoned samples share the same uniform trigger. However, recent advanced backdoor attacks show that this assumption is no longer valid in dynamic backdoors where the triggers vary from input to input, thereby defeating the existing defenses.
+    In this work, we propose a novel technique, Beatrix (backdoor detection via Gram matrix). Beatrix utilizes Gram matrix to capture not only the feature correlations but also the appropriately high-order information of the representations. By learning class-conditional statistics from activation patterns of normal samples, Beatrix can identify poisoned samples by capturing the anomalies in activation patterns. To further improve the performance in identifying target labels, Beatrix leverages kernel-based testing without making any prior assumptions on representation distribution. We demonstrate the effectiveness of our method through extensive evaluation and comparison with state-of-the-art defensive techniques. The experimental results show that our approach achieves an F1 score of 91.1% in detecting dynamic backdoors, while the state of the art can only reach 36.9%. 
+
+Comments: 	18 pages, 23 figures. Accepted to NDSS 2023. Camera-ready version. Code availability: this https URL
+Subjects: 	Cryptography and Security (cs.CR) ; Artificial Intelligence (cs.AI)
+Cite as: 	arXiv:2209.11715 [cs.CR]
+  	(or arXiv:2209.11715v3 [cs.CR] for this version)
+  	https://doi.org/10.48550/arXiv.2209.11715
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Wanlun Ma [ view email ]
+[v1] Fri, 23 Sep 2022 16:47:19 UTC (8,527 KB)
+[v2] Mon, 26 Sep 2022 01:02:52 UTC (8,527 KB)
+[v3] Mon, 19 Dec 2022 04:02:37 UTC (4,397 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled The "Beatrix'' Resurrections: Robust Backdoor Detection via Gram Matrices, by Wanlun Ma and 4 other authors
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.CR
+< prev   |   next >
+new | recent | 2209
+Change to browse by:
+cs
+cs.AI
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

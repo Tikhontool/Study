@@ -1,0 +1,731 @@
+Backdoor Attack against Object Detection with Clean Annotation
+Yize CHENG*, Wenbin HU∗, Minhao CHENG Hong Kong University of Science and Technology
+Hong Kong SAR, China
+{ychengbt, whuak}@connect.ust.hk, minhaocheng@cse.ust.hk
+
+arXiv:2307.10487v1 [cs.CV] 19 Jul 2023
+
+Abstract
+Deep neural networks (DNNs) have shown unprecedented success in object detection tasks. However, it was also discovered that DNNs are vulnerable to multiple kinds of attacks, including Backdoor Attacks. Through the attack, the attacker manages to embed a hidden backdoor into the DNN such that the model behaves normally on benign data samples, but makes attacker-specified judgments given the occurrence of a predefined trigger. Although numerous backdoor attacks have been experimented on image classification, backdoor attacks on object detection tasks have not been properly investigated and explored. As object detection has been adopted as an important module in multiple security-sensitive applications such as autonomous driving, backdoor attacks on object detection could pose even more severe threats. Inspired by the inherent property of deep learning-based object detectors, we propose a simple yet effective backdoor attack method against object detection without modifying the ground truth annotations, specifically focusing on the object disappearance attack and object generation attack. Extensive experiments and ablation studies prove the effectiveness of our attack on two benchmark object detection datasets, PASCAL VOC07+12 and MSCOCO, on which we achieve an attack success rate of more than 92% with a poison rate of only 5%.
+1. Introduction
+Object detection systems are widely used in a large variety of everyday applications, including surveillance systems and autonomous driving systems. These systems mostly leverage state-of-the-art deep learning-based object detection models such as Faster-RCNN [20] and models of the Yolo family [17, 19, 2, 11, 26], where the latter is used more extensively nowadays due to its extraordinary performance with high mean Average Precision (mAP) and great inference time efficiency. However, despite achieving unprece-
+* Equal Contribution.
+
+Figure 1. Example of the ODA and OGA attacking scenarios. The first row illustrates the idea of ODA (no target class is needed) and the second row illustrates the idea of OGA (with a target class hair dryer). The three figures from left to right are the raw input image, the original prediction result by the model, and the prediction result after presenting the trigger at test time respectively.
+dented success, deep learning models have also been discovered to be vulnerable to backdoor attacks, also known as neural trojan. The attacker attempts to embed a backdoor into the model by modifying a certain ratio of the training data. The modification may often include inserting some triggers into the training data samples, and modifying the ground truth labels of the corresponding samples. After the model is trained on such data, it will perform normally on benign test samples during test time, but will output the attacker-specified result once the inserted trigger is presented in the test sample.
+While backdoor attacks have been extensively investigated in the image classification settings [9, 21, 15], they haven’t been properly investigated in the object detection task. As object detection has been adopted as an important module in multiple security-sensitive applications such as autonomous driving, backdoor attacks on object detection could pose even more severe threats to human lives and properties. To the best of our knowledge, BadDet [3] is the only work that makes a proper definition of this problem and conducted attack experiments on common object detection frameworks. Yet their attack was achieved using a dirty label attack, where they explicitly modified the ground truth annotations such that the labels are no longer consistent with the image data, making it easily detectable
+
+by a human inspector. In our work, we propose to conduct the first backdoor attack in a clean-label manner. That is, we will only poison the training images without modifying the annotations. Our proposed clean-label attack keeps the consistency between the image content and the annotation, which makes it harder to be identified by human inspection, bringing stronger stealthiness.
+Inspired by the inherent property of deep learning-based object detection models, we propose a simple and intuitive attack strategy for embedding backdoors into object detection applications with clean labels. Specifically, we focus on two most common scenarios that can induce severe and practical threats in real-life applications – The Object Disappearance Attack (ODA) and the Object Generation Attack (OGA). ODA makes the predicted bounding box of an object disappear given the presence of a trigger on the object of interest at test time. And OGA is the attacking scenario where a false positive predicted bounding box of a target class will be generated around the trigger position if a trigger is present during inference. Taking the object detection systems on autonomous driving vehicles as an example, if an ODA attack is conducted during operation, it will produce a dangerous cloaking effect, causing the vehicle to not see the existence of pedestrians or other cars on the road, potentially leading to accidents. The potential threat of OGA may also be devastating. For example, when the autonomous vehicle is driving on the highway, it is usually assumed that there should be no pedestrians in the middle of the highway. If an attacker makes the model believe a person is right in front of the vehicle when driving at a very high speed on the highway, emergency braking and evasive turns may cause rollovers. An example illustrating the above two attack scenarios is shown in Figure 1.
+Comprehensive experiments are conducted on different models and datasets to show the effectiveness of our attack. Overall, we achieve an Attack Success Rate (ASR) of more than 92% with Yolov3 [19] + SPP [10] under both attack scenarios, and an ASR of more than one half for FasterRCNN [20] under ODA and more than 70% under OGA.
+Our main contributions can be summarized as follows: (I) We first reveal that inherent properties of deep learningbased object detectors can be easily utilized to insert a clean annotation backdoor. When an attacker designs the backdoor by aligning with the association built by the detector, a clean annotation backdoor attack is easily and effectively achieved. (II) Based on this intuition, we propose a novel, simple, yet effective clean-label attacking strategy against object detection under both the ODA and OGA attacking scenarios. (III) Extensive experiments and ablation studies are conducted to verify the effectiveness of the proposed attack and sustainability under fine-tuning.
+
+2. Related Work
+2.1. Object Detection
+Object Detection is one of the most important applications of modern computer vision. It serves as an essential building module in robotics, surveillance systems, autonomous driving, etc. RCNN [8] made the first attempt to deploy deep learning for object detection. Despite having poor efficiency, RCNN has already outperformed all traditional object detection pipelines at that time. Later on, in aim of working towards real-time object detection, FastRCNN [7] and FasterRCNN [20] were built upon RCNN to improve efficiency. Yet they still fail to achieve real-time detection during inference. These models are often referred as two-stage detectors. One significant step of achieving real-time object detection was to solve the problem in a one-stage manner, of which the unified one-stage detection model Yolo [17] serves as a representative. The idea of Yolo has become so popular that several versions of Yolo [18, 19, 2, 11, 26] were later proposed, making the models of the Yolo family one of the most popular and widely deployed deep learning-based detection frameworks today. However, one inherent property (to be explained in Section 4) of detection models makes them vulnerable to a simple yet effective clean-label backdoor poisoning strategy, which we made use of in our attack.
+2.2. Backdoor Attacks against Vision Models
+Attacking Image Classification. Backdoor attacks against image classification can be commonly found in the backdoor learning literature. The work from Gu et al is one of the earliest attempts at embedding backdoors into DNNs, known as BadNets [9]. It set up a basic flow of conducting backdoor poisoning against DNNs, i.e. the attacker first maliciously modify a certain ratio of the training dataset by adding triggers on the images and changing the corresponding label to the target label. And then the poisoned dataset will be used to train deep learning models, leaving a backdoor in the model that can be activated at inference time when the trigger is present. This flow was followed by most works on backdoor attacks against classification. However, the above flow of poisoning is also known as dirty label attacks, in a sense that the ground truth labels are modified, causing inconsistency between the image content and the label. To improve stealthiness, Turner et al. [25] and Barni et al. [1] proposed to conduct backdoor attacks against classification without modifying the ground truth labels, known as clean label attacks. Under this setting, the image content will remain consistent with the labels, effectively improving the stealthiness and evasiveness. However, as object detection plays a more essential role in practical deployments, we focus on revealing the vulnerability of object detection models against backdoor attacks in this work.
+
+Figure 2. The attack pipeline. We assume the attacker can only modify a subset of the training data, and no knowledge regarding other information about the training process is assumed.
+
+Attacking Object Detection. Backdoor attack on object detection is an area that is not yet well investigated and explored. Recently, BadDet [3] was proposed to conduct backdoor attacks against object detection models. However, they explicitly modified both the training image and the ground truth annotation file before training, making it a dirty-label attack. Explicitly modifying the ground truth annotation files makes it easy for the attack to be detected. A human inspector can easily detect that the number of objects in the annotation file is inconsistent with the number of objects in the image, making the attack easily detectable and hence reducing the stealthiness of the attack. We conduct both ODA and OGA without modifying the ground truth annotations, which improves stealthiness. Another limitation of the ODA setting under BadDet is that their attack is specifically designed for one target class. We break this limitation as our attack does not rely on the object itself, but on the association learnt between our trigger and the background. Such a setting provides more flexibility at inference, as any object of interest can disappear if we patch a trigger to it.
+3. Threat Model
+Attacker’s Assumptions. We assume the attacker is only allowed to modify a certain ratio (poison rate) of the training images, which is regarded as the minimum assumption for successfully conducting a backdoor attack by data poisoning [13]. The attacker will have no knowledge regarding other information about the training process. Clean Label Attack. We define the attack to be a clean
+
+label attack if the attacker is only allowed to modify a subset of the training images. In other words, the content of all annotation files must remain unchanged. The number of objects visible in the image must be consistent with the number of objects listed in the corresponding annotation file. All our proposed attacks are in a clean-label manner which is different from the attacks in BadDet [3].
+Attack Pipeline. In general, the attack pipeline can be divided into three stages. In the first stage, the attacker makes modifications to a subset Dpoiosn of all training images Dtrain. Note that only the images are modified, following the definition of clean label attack. The poisoned subset of images will then be combined with the rest of the be-
+′
+nign images Dbenign to form the entire training set Dtrain, which will be released to the user for model training, i.e.
+′
+Dtrain = Dpoiosn ∪ Dbenign. Then, in the second and third stages, the user of the training data will train and test the model as in the standard training and testing process for supervised machine learning. The discussed threat is practical when third-party training data is used for model training. The pipeline is illustrated in Figure 2.
+Attacker’s Goal. The goals of the attacker are that the infected model will show comparable performance as a benign model on the clean test data, in our case, demonstrating a comparable mean average precision (mAP) during inference; And that the model can make the attacker-specified behaviour given the presence of the trigger at test time, in our case, making an object disappear or generating a nonexisting false positive bounding box.
+
+4. Methodology
+
+4.1. Object Disappearance Attack
+
+Object Disappearance Attack (ODA) is the attacking
+
+scenario where the predicted bounding box of an object dis-
+
+appears given the presence of a trigger on the object of inter-
+
+est at test time. Formally, denote an infected model as Fθ, and its detection output Y on a clean test image x is denoted
+
+as Y = Fθ(x) = {B1, B2, ..., Bn}, where Bi denotes each
+
+bounding box. The subset of all predicted bounding boxes
+
+that are true positive prediction results is denoted as YT P ,
+
+with YT P ⊆ Y . At inference time, a poisoned test image
+
+xpoison is constructed by patching triggers to the centers of
+
+a subset YT P sub of the true positive box prediction results
+
+YT P , i.e YT P sub ⊆ YT P , with the goal that the detection result Y ′ on the poisoned image will not contain the objects
+
+patched
+
+with
+
+the
+
+trigger,
+
+i.e.
+
+Y
+
+′
+
+=
+
+Fθ (xpoison )
+
+=
+
+C , YT P sub
+Y
+
+where CMN denotes the complement of set N in the union set
+
+M . Note that there is no specific target class, as bounding
+
+boxes in YT P sub can be of any class.
+
+To conduct ODA, we found that an important step in
+
+deep learning-based object detection models is to determine
+
+whether a region in the input image belongs to the back-
+
+ground or an object of interest. For example, an inherent
+
+property that all Yolo family models have in common is that
+
+they divide the image into M ×M grid, and B anchor boxes
+
+will be proposed for each grid cell. The model is trained to
+
+approach a target vector for each cell. One important el-
+
+ement within the target vector is the confidence score C,
+
+which is responsible for determining whether a center of an
+
+object is contained in the cell. The definition of the con-
+
+fidence score C is shown in equation 2. Taking a closer
+
+look into the non-objectness regression part of the confi-
+
+dence loss of the classical Yolo objective function:
+
+Lnoobj = λnoobj ·
+
+noobj
+Iij
+
+·
+
+(Ci,j
+
+−
+
+Cˆi,j )2
+
+(1)
+
+i∈S×S j∈B
+
+C = P r(object) · IOU
+
+(2)
+
+where
+
+noobj
+Iij
+
+=
+
+1 if the anchor box j
+
+in cell i is not re-
+
+sponsible for any object, and Ci,j is the confidence score
+
+for anchor box j in cell i. If the IOU of the anchor box
+
+and the ground truth object bounding boxes are lower than
+
+a certain IOU threshold, the target confidence score value Cˆi,j, to which Ci,j will be trained to approach, will be set
+to 0, which is the value of P r(object) in Equation 2 given
+
+that there is no object. In other words, all confidence scores
+
+in the target vector for a grid will be trained to approach 0
+
+if the grid lies in the background. A similar example can be
+
+found in two-stage detectors as well, such as FasterRCNN
+
+[20], where the Region Proposal Network (RPN) is respon-
+
+sible for proposing Regions of Interest (ROI) in which the
+
+model believes contains an object. If an area is believed
+
+not to contain an object of interest, the corresponding region will simply not be pooled by ROI Pooling, and no box predictions will be made at that position.
+Based on the above intuition, we conduct the ODA attack by randomly scattering our trigger in the background of the image such that the model can learn an association between the trigger and background. During test time, if the model sees a trigger somewhere in the image, it will believe that it belongs to the background, so that the RPN in FasterRCNN will not predict the object region as an ROI, or the confidence score in the target vector for models of Yolo family will approach 0. If we put the trigger inside an object of any class, the object will disappear since it is regarded as background, which means it is a successful attack under the ODA scenario. The pseudo-code for the scattering process is shown in Algorithm 1. The intuition is further confirmed by model visualization in Section 5.3.
+
+Algorithm 1: scatterTrigger()
+
+Input: x: the original image, T : the trigger pattern, α: the blending ratio, GT : the ground truth annotation for the given image, n: number
+
+of triggers to scatter
+
+Output: xpoison
+
+1 xpoison ← x.copy()
+
+2 k←0
+
+3 W t ← T.width
+
+4 Ht ← T.height
+
+5 while k < n do
+
+6 xpos ← randint((0, x.width))
+
+7 ypos ← randint((0, x.height))
+
+8 R ← region with top left corner (xpos, ypos),
+
+9 and bottom right corner (xpos + W t, ypos + Ht)
+
+10 noOverlap ← true
+
+11 for i ← 1 to n do
+
+12
+
+if IOU(GT [i], R) ̸= 0 then
+
+13
+
+noOverlap ← f alse
+
+14
+
+break
+
+15
+
+else
+
+16
+
+continue
+
+17
+
+end
+
+18 end
+
+19 if noOverlap then
+
+20
+
+xpoison[R] ← xpoison[R] · (1 − α) + T · α
+
+21
+
+GT .append(R)
+
+22
+
+k ← k+1
+
+23 end
+
+24 end 25 return xpoison
+
+When scattering the triggers in the background, we ensure that there will be no overlapping between any two trig-
+
+gers scattered to maximize the effect of each trigger. This is achieved by line 21 in Algorithm 1. No trigger shall be scattered into any ground truth bounding boxes to not affect the test time mAP on benign test samples. Possible parameters here include the number of triggers scattered per image, and also the blending ratio, which is an effective tunable parameter to improve stealthiness [4], between the trigger and the image. The effect of both parameters on our overall attack success rate is investigated in the ablation study under the Experiment Section 5.4. For easier illustration, an example of the scattering result on an image with the number of triggers scattered per image set as 5, and a blending ratio of 100%, i.e. the original image content is completely replaced, is shown in the examples images in Figure 2. However, we do not require such a high number of triggers scattered per image and blending ratio for conducting a successful attack.
+4.2. Object Generation Attack
+Object Generation Attack (OGA) is the scenario where a false positive predicted bounding box of a target class will be generated around the trigger position if a trigger is present at test time. Formally, following the same definition of Y and Fθ in Section 4.1, a poisoned test image xpoison is constructed at inference by patching k triggers to some random locations R = {r1, ..., rk} in the background of the image, where ri denotes a region in the background, satisfying that for ∀ri ∈ R, ri is not in Bj for ∀Bj ∈ Y . The goal is that the detection result Y ′ on the poisoned image will contain false positive bounding boxes at the locations where a trigger is patched, i.e. Y ′ = Fθ(xpoison) = Y ∪ {B1′ , ..., Bk′ }, where Bi′ denotes a false positive bounding box prediction of the target class.
+To conduct OGA, we leverage the same step regarding the inherent process of object detectors mentioned in Section 4.1. Only now instead of looking at the non-objectness regression, we get inspired by the objectness regression:
+
+Lobj =
+
+obj
+Iij
+
+·
+
+(Ci,j
+
+−
+
+Cˆi,j )2
+
+(3)
+
+i∈S×S j∈B
+
+where
+
+obj
+Iij
+
+=
+
+1
+
+if
+
+anchor
+
+box
+
+j
+
+in
+
+cell
+
+i
+
+is
+
+responsible
+
+for
+
+anchoring an object, and Ci,j follows the same definition as
+
+in Equation 1. With the same definition of C as in equation
+
+2, confidence scores for the grid will be trained to approach
+
+the value of IOU if some object of interest lies in this grid
+
+since now P r(object) shall be set as 1. If some confidence
+
+scores were higher than the defined threshold in the target
+
+vectors, then the model will think that there exists an object
+
+of
+
+interest
+
+in
+
+this
+
+grid,
+
+and
+
+the
+
+obj
+Ii
+
+value
+
+in
+
+the
+
+classification
+
+loss (Equation 4) will be set as 1, making the model penalty
+
+wrong classification.
+
+S2
+
+Lcls =
+
+obj
+Ii
+
+(pi(c) − piˆ(c))2
+
+(4)
+
+i=0
+
+c∈classes
+
+Based on the above intuition, we conduct the OGA at-
+
+tack by putting triggers into the center of the ground truth
+
+bounding boxes of the target class, so that the model will
+
+learn an association between the trigger and the object of
+
+the target class. Then the RPN will be more likely to pro-
+
+pose the region containing the trigger as an ROI, and the
+
+confidence score in the target vector for models of the Yolo
+
+family will approach the IOU value between the anchor box
+
+and the ground truth. There is only one tunable parameter
+
+here in this case, which is the blending ratio. Moreover,
+
+there are fewer restrictions during the OGA poisoning pro-
+
+cess, as putting a trigger into a bounding box is even more
+
+trivial than scattering in the background. An example of a
+
+poisoned image under OGA can also be found in Figure 2.
+
+We also further confirm the intuition in Section 5.3.
+
+5. Experiments
+In this section, we conduct extensive experiments to test the proposed attack on different datasets and models. We first introduce the experiment setup and implementation details in Section 5.1 and 5.2. In Section 5.3, we show the main results of our baseline setup. We also show model visualizations by showing the corresponding confidence scores. Besides showing the main results of the introduced scenarios, in Section 5.4, we conduct ablation studies to comprehensively demonstrate the consistent effectiveness of our method when various variables change. Lastly, we analyze the attack’s capability of affecting transfer learning by testing its effectiveness after fine-tuning with clean data in Section 5.5.
+5.1. Poisoning Settings
+Datasets. We conduct experiments using MSCOCO2017 [14] and PASCAL VOC07+12 [5, 6], which are two commonly used benchmark datasets for object detection tasks. For MSCOCO, we use its 118k training images for training and its 5k validation images for evaluation. For the VOC dataset, we take the union of the train-val images in VOC2007 and VOC2012 as our training set and use the test set in VOC2007 as our evaluation set. The training set and the evaluation set contain 21k and 5k images respectively. Models. Our two victim models are Yolov3 [19] with SPP [10] structure and a Darknet-53 [16] backbone, and FasterRCNN [20] with VGG16 [24] backbone. We train Yolov3 using Adam [12] optimizer with a learning rate of 1e-4 and FasterRCNN using SGD with a learning rate of 1e-3. This achieves a performance that is close to the best performance that the same models can achieve on the same
+
+datasets. Particularly, during testing, Yolov3 should achieve
+
+mAP@0.5:0.95 of 44% on MSCOCO and mAP@0.5 of
+
+78% on VOC07+12 respectively, and FasterRCNN should
+
+achieve mAP@0.5 75% on VOC07+12. We set an input
+
+image size of 1280×1280 for Yolov3 and an input size of
+
+600×800 for FasterRCNN.
+
+Poisoning. We follow previous work on backdoor attacks
+
+and define a general poison rate for both the ODA and OGA
+
+scenario as the ratio between the number of images we mod-
+
+ified and the total number of images in the training dataset.
+
+i.e.
+
+P oisonRate
+
+=
+
+, |Dpoison |
+|Dtrain |
+
+where
+
+Dpoison
+
+denotes
+
+the
+
+subset of images that we modify, and Dtrain denotes the
+
+full training dataset. For baseline evaluation, we make the
+
+following settings: For ODA, The training images are poi-
+
+soned with a poison rate of 10% and 100% for yolov3 and
+
+FasterRCNN respectively. We simply poison all objects of
+
+the target class for OGA since only a small portion of im-
+
+ages contain objects of the target class and this inherently
+
+maintains a low poison rate. For OGA, we choose hair dryer
+
+as target class on MSCOCO with a poison rate of 0.16%,
+
+and choose car as target class on VOC07+12 with a poi-
+
+son rate of 9.47%. A patch of interpolated 4×4 Gaussian
+
+random noise [21] is chosen as the trigger, as shown in Ap-
+
+pendix (I). All triggers are blended with a ratio of 100%.
+
+We scatter 5 triggers per image in the ODA scenario.
+
+5.2. Evaluation Settings 5.2.1 Backdoor Activation
+
+ODA. To evaluate the effectiveness of ODA at inference
+
+time, we put a trigger at the center of the target object and
+
+check whether the model will fail to detect its existence.
+
+To verify the effectiveness of the attack in a more rigorous
+
+manner, we set two constraints when attempting to activate
+
+the backdoor at inference time:
+
+(I) The original ground truth bounding box is big
+
+enough.
+
+Concretely,
+
+we
+
+require
+
+min(
+
+H ht
+
+,
+
+W wt
+
+)
+
+≥
+
+5, where
+
+H, W, ht, wt are the height and width of the object bound-
+
+ing box and the trigger respectively.
+
+(II) We only put the trigger in the true positive (TP) ob-
+
+ject predictions, where an object is said to be a TP object
+
+if and only if this object is correctly detected and classi-
+
+fied by the same model when there are no triggers present
+
+during inference time, i.e., TP objects are found using the
+
+same model on the benign test dataset. Here, the criterion
+
+of correctly detected and classified is that the bounding box
+
+output for this object of interest has an IOU larger than 0.5
+
+with a ground truth bounding box, and the predicted class is
+
+consistent with the ground truth label of this object.
+
+Restriction (I) ensures that the trigger is small enough
+
+relative to the object such that the disappearance of an ob-
+
+ject of interest is not caused by simply covering the object
+
+with the trigger, but by the association between the trigger
+
+and the background. Restriction (II) ensures that the bounding box of an object disappeared because the backdoor is activated due to the existence of the trigger, not simply because the perturbation introduced by the trigger causing the model to miss the object. OGA. To activate the OGA backdoor at inference time, we put a trigger in the background of the testing image, and check whether a bounding box of the target class is predicted around the trigger location. For more rigorous evaluation, we define the background of a testing image as the regions where no bounding box is predicted by the same model. This prevents miscounting any original existing bounding box predictions as an OGA success.
+
+5.2.2 Evaluation Metrics
+
+As the two main goals of the attacker are to make the infected model show comparable performance as a benign model on clean test data, and display the attacker-specified behaviour given the presence of the trigger at test time, we use the mean average precision (mAP) to verify the first goal, and the attack success rate (ASR) to verify the second goal.
+Specifically, we define mAPnormal as the mAP that a benign model achieves on a clean test set. We expect this to be close to the best performance that the same model can achieve on the same dataset, so as to ensure the model itself is well converged. We define mAPbenign as the mAP that the infected model achieves on the clean test set. This should be close to mAPnormal so that the infected model shows comparable performance as a benign model on the clean test data. We follow the convention of reporting mAP@0.5 for VOC2007 dataset, and report mAP@0.5:0.95 for MSCOCO dataset.
+We define ASR for ODA as
+
+# of disappeared bbox
+
+ASR =
+
+(5)
+
+# of patched trigger at inf erence
+
+Note that when patching triggers at inference, we follow the restrictions listed in Section 5.2.1, which means all disappeared bounding boxes in the numerator must be caused by the activation of the backdoor. This is already guaranteed by the restricted trigger patching process itself.
+We define ASR for OGA as
+
+# of generated bbox
+
+ASR =
+
+(6)
+
+# of patched trigger at inf erence
+
+Note that the counting of the number of generated bounding boxes is done by iterating through all patched triggers at inference time. This prevents double counting the number of successes of one OGA attack in case more than one bounding box were predicted around the same trigger.
+
+Figure 3. Heat maps for model visualization to confirm our intuition. The Yolov3 [19] model has three prediction headers of size (40×40), (80×80), and (160×160) each. We choose the (40×40) header as an example. We show the objectness confidence score for ODA and the target class confidence score for OGA. Sub-figure (i)-(iv) are the ODA prediction result of the clean model on clean data, the infected model on clean data, the clean model on poisoned data, and the infected model on poisoned data respectively, and (v)-(viii) are the OGA prediction results under the same order of model-data combinations.
+
+5.3. Main Results
+Following the poisoning and evaluation settings defined in Section 5.1 and 5.2, the main results are shown in Table 1. It can be seen that the model achieves mAPnormal that is close to the best performance that the same model can achieve on both MSCOCO and PASCAL VOC07+12, suggesting the model itself is well converged under our training settings. With the same training settings, the infected model achieves an mAPbenign that is very close to the value of mAPnomral, showing that the infected model behaves very similarly to a clean model on the clean testing data. Finally, we achieve an attack success rate of more than 90% on both scenarios and datasets using Yolov3, and more than one half for ODA and more than 70% for OGA using FasterRCNN. These ASR values are threatening high for safety-critical applications, proving the overall effectiveness of the proposed attack.
+We also add a set of blank control for comparison to further verify that the backdoor is implanted only after poisoning the training data. Simply adding the trigger on test samples and conducting inference with a clean model will not lead to a successful attack. The attack success rate of a clean model on the poisoned test set is denoted as ASRblank. The results are shown in the last row of Table 1.
+
+Model
+
+Yolov3
+
+FasterRCNN
+
+Scenario ODA OGA ODA OGA ODA OGA
+
+Dataset COCO COCO VOC VOC VOC VOC
+
+mAPnormal(%)
+
+44.3
+
+78.3
+
+74.8
+
+mAPbenign(%) 43.6 43.4 78.1 77.5 72.4 73.7
+
+ASR(%) 93.5 99.1 98.2 92.9 52.2 70.4
+
+ASRblank(%) 6.6 0 5.7 0 4.1 0.2 Table 1. Main experiment results following the settings in Section
+
+5.1 and 5.2. We report mAPnormal, mAPbenign, and ASR on both the ODA and OGA attacking scenarios. Evaluation metrics
+
+follow the definitions in Section 5.2.2
+
+The Backdoor Implanting Progress. To further help us understand how the association between the trigger and the background is built throughout the ODA training process and how the association between the trigger and objects of the target class is built throughout the OGA training process, we make an evaluation of the ASR after every epoch of training. The plot showing the association built-up progress is shown in Figure 4. From the plot, we can see that both the mAP and ASR are gradually growing as more epochs are trained, proving that the desired associations are indeed built throughout the training process. We also discover that in the ODA scenario, the ASR is already very high just after one epoch of training, but it takes slightly longer for the ASR to grow under the OGA scenario. We suspect that it is more challenging for the model to build an association between the trigger and a specific class than building the association with the background. This may be caused by the fact that similar to the feature of an effective trigger, which should be something easy to learn [22], many features of background areas are similar to low-level textures, such as brick walls, plain sky, calm water, etc., which are also easy features for the neural network. Hence it is easier for the model to regard the trigger and the background as the same thing. However, features of the specific classes contain much more high-level abstracts, making it harder for the model to find the similarity between the trigger and the class.
+Model Visualization. Despite that the ASR value already proves the effectiveness of the attack, we confirm the intuition of our method by “seeing inside” the model. Since the confidence scores in Yolo models are easier to visualize, we take the output of the (40×40) header of the Yolov3 [19] model as an example. We plot a heat map illustrating the magnitude of the confidence scores on both a clean model and an infected model under both the ODA and OGA scenarios. The heat map is illustrated in Figure 3. The shade of the color in the heat map represents the confidence score.
+
+Trigger Size
+
+ASR
+
+mAP
+
+Trigger Pattern
+
+ASR
+
+mAP
+
+Blended Ratio
+
+ASR
+
+mAP
+
+Trigger Number
+
+ASR
+
+mAP
+
+Poison Rate
+
+ASR
+
+mAP
+
+Target Class
+
+ASR mAP
+
+30×30 99.5 43.5 Noise 99.5 43.5 100% 99.5 43.4
+
+5
+
+99.5
+
+43.4
+
+100% 50%
+
+99.5 93.1
+
+43.5 43.5
+
+– –
+
+ODA 20×20 97.7 43.2 C-Mark 99.4 43.6 80% 98.3 42.6
+
+2
+
+98.8 43.0
+
+20% 10%
+
+91.9 42.0 93.5 43.6
+
+– –
+
+10×10 97.9 42.1 Melon 96.8 42.4 50% 98.7 42.3
+
+1
+
+99.3 42.7
+
+5% 1%
+
+92.6 43.9 43.9 42.5
+
+– –
+
+–– –– –– –– –– ––
+
+30×30 99.1 43.4 Noise 99.1 43.4 100% 99.1 43.4 – OGA 20×20 97.7 42.1 C-Mark 93.5 42.1 80% 99.7 42.8 –
+10×10 86.0 43.7 Melon 95.1 42.9 50% 95.3 43.1 –
+
+–– –– ––
+
+– – – HairDrier 99.1 43.4 – – – Toaster 98.3 42.8 – – – Scissors 99.6 43.2
+
+Table 2. Results of ablation studies. We show the influence of each variable in the attack settings under both attacking scenarios. The ASR here follows the same definition under main results, and the mAP refers to mAPbenign as defined in evaluation settings.
+
+Figure 4. The plot showing the changes of mAP and ASR of Yolov3 with the training epochs on both ODA and OGA.
+It can be seen that under the ODA scenario, the infected model indeed produced a significantly lower object confidence score when a trigger is patched to an object at inference (Figure 3.(iv)), and produced a significantly higher specific-class confidence score when a trigger is patched to the background area during inference under the OGA setting (Figure 3.(viii)). These heat map visualizations further confirm our intuition of the attacking strategy.
+Figure 5. The result of fine-tuning the infected model on a clean PASCAL VOC07+12 training set + a clean MSCOCO validation set, which is 21k clean images in total.
+5.4. Ablation Study To explore how each variable in our settings may alter
+our attack effectiveness, we conduct ablation studies to investigate the influence of each parameter, which include the trigger size, trigger pattern (shown in Appendix (I)), trigger blending ratio under both ODA and OGA, target class
+
+selection under OGA, and the number of triggers scattered per image and the poison rate under ODA. The complete results are shown in Table 2. When investigating the influence of one variable, we control all other variables by setting default values as the followings: We set the number of scattered triggers per image for OGA as 5, the poison rate for ODA as 100%, trigger size as 30×30, blending ratio as 100%, trigger pattern as the patched 4×4 Gaussian noise, and the target class for OGA as hairdryer. We can see that the attack works effectively under different variable settings.
+5.5. Sustainability under Fine-tuning
+Transfer learning is commonly adopted in training neural networks as people may often download pre-trained models from a third party and fine-tune it on a custom dataset. Finetuning, which can be easily applied to the object detection setting, has been proven to be an effective way of mitigating backdoors in neural networks [23]. We fine-tune our infected model, which is trained on a poisoned MSCOCO training set, using a clean PASCAL VOC07+12 training set + a clean MSCOCO validation set, which is 21K clean images in total. The fine-tuning results are shown in Figure 5. It can be seen that the attack success rate of OGA still remains nearly 100% after fine-tuning, and although the ASR of ODA slightly dropped, it still maintains a value of more than 90%. This proves that our attack can also be used against transfer learning.
+6. Conclusion
+In this paper, we revealed an inherent property of deep learning-based object detectors, which can be made use of to conduct backdoor attacks. Based on this inherent property, we proposed a simple, intuitive, and effective backdoor attack poisoning strategy against object detection applications in a clean-labeled manner under the ODA and OGA scenario. Specifically, without modifying annotations, we
+
+design the poisoning strategy by aligning with the association built by the model itself. Extensive experiments verify the effectiveness of our attack under different settings, which also show that our attack can induce threats towards transfer learning as fine-tuning is unable to mitigate the implanted backdoor. We hope this work can raise the community’s awareness of the potential threat of backdoor attacks to object detectors, which are extensively used in a wide range of safety-sensitive real-life applications.
+References
+[1] Mauro Barni, Kassem Kallas, and Benedetta Tondi. A new backdoor attack in cnns by training set corruption without label poisoning. In 2019 IEEE International Conference on Image Processing (ICIP), pages 101–105. IEEE, 2019. 2
+[2] Alexey Bochkovskiy, Chien-Yao Wang, and HongYuan Mark Liao. Yolov4: Optimal speed and accuracy of object detection. arXiv preprint arXiv:2004.10934, 2020. 1, 2
+[3] Shih-Han Chan, Yinpeng Dong, Jun Zhu, Xiaolu Zhang, and Jun Zhou. Baddet: Backdoor attacks on object detection. arXiv preprint arXiv:2205.14497, 2022. 1, 3
+[4] Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep learning systems using data poisoning. arXiv preprint arXiv:1712.05526, 2017. 5
+[5] M. Everingham, L. Van Gool, C. K. I. Williams, J. Winn, and A. Zisserman. The PASCAL Visual Object Classes Challenge 2007 (VOC2007) Results. http://www.pascalnetwork.org/challenges/VOC/voc2007/workshop/index.html. 5
+[6] M. Everingham, L. Van Gool, C. K. I. Williams, J. Winn, and A. Zisserman. The PASCAL Visual Object Classes Challenge 2012 (VOC2012) Results. http://www.pascalnetwork.org/challenges/VOC/voc2012/workshop/index.html. 5
+[7] Ross Girshick. Fast r-cnn. In Proceedings of the IEEE international conference on computer vision, pages 1440–1448, 2015. 2
+[8] Ross Girshick, Jeff Donahue, Trevor Darrell, and Jitendra Malik. Rich feature hierarchies for accurate object detection and semantic segmentation. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 580–587, 2014. 2
+[9] Tianyu Gu, Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Evaluating backdooring attacks on deep neural networks. IEEE Access, 7:47230–47244, 2019. 1, 2
+[10] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Spatial pyramid pooling in deep convolutional networks for visual recognition. IEEE transactions on pattern analysis and machine intelligence, 37(9):1904–1916, 2015. 2, 5
+[11] Glenn Jocher. ultralytics/yolov5: v3.1 - Bug Fixes and Performance Improvements. https://github.com/ ultralytics/yolov5, Oct. 2020. 1, 2
+[12] Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980, 2014. 5
+
+[13] Yiming Li, Yong Jiang, Zhifeng Li, and Shu-Tao Xia. Backdoor learning: A survey. IEEE Transactions on Neural Networks and Learning Systems, 2022. 3
+[14] Tsung-Yi Lin, Michael Maire, Serge J. Belongie, Lubomir D. Bourdev, Ross B. Girshick, James Hays, Pietro Perona, Deva Ramanan, Piotr Doll’a r, and C. Lawrence Zitnick. Microsoft COCO: common objects in context. CoRR, abs/1405.0312, 2014. 5
+[15] Yunfei Liu, Xingjun Ma, James Bailey, and Feng Lu. Reflection backdoor: A natural backdoor attack on deep neural networks. In European Conference on Computer Vision, pages 182–199. Springer, 2020. 1
+[16] Joseph Redmon. Darknet: Open source neural networks in c. http://pjreddie.com/darknet/, 2013–2016. 5
+[17] Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi. You only look once: Unified, real-time object detection. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 779–788, 2016. 1, 2
+[18] Joseph Redmon and Ali Farhadi. Yolo9000: better, faster, stronger. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 7263–7271, 2017. 2
+[19] Joseph Redmon and Ali Farhadi. Yolov3: An incremental improvement. arXiv preprint arXiv:1804.02767, 2018. 1, 2, 5, 7
+[20] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object detection with region proposal networks. Advances in neural information processing systems, 28, 2015. 1, 2, 4, 5
+[21] Aniruddha Saha, Akshayvarun Subramanya, and Hamed Pirsiavash. Hidden trigger backdoor attacks. In Proceedings of the AAAI conference on artificial intelligence, volume 34, pages 11957–11965, 2020. 1, 6
+[22] Pedro Sandoval-Segura, Vasu Singla, Liam Fowl, Jonas Geiping, Micah Goldblum, David Jacobs, and Tom Goldstein. Poisons that are learned faster are more effective. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 198–205, 2022. 7
+[23] Zeyang Sha, Xinlei He, Pascal Berrang, Mathias Humbert, and Yang Zhang. Fine-tuning is all you need to mitigate backdoor attacks. arXiv preprint arXiv:2212.09067, 2022. 8
+[24] Karen Simonyan and Andrew Zisserman. Very deep convolutional networks for large-scale image recognition. arXiv preprint arXiv:1409.1556, 2014. 5
+[25] Alexander Turner, Dimitris Tsipras, and Aleksander Madry. Label-consistent backdoor attacks. arXiv preprint arXiv:1912.02771, 2019. 2
+[26] Chien-Yao Wang, Alexey Bochkovskiy, and HongYuan Mark Liao. Yolov7: Trainable bag-of-freebies sets new state-of-the-art for real-time object detectors. arXiv preprint arXiv:2207.02696, 2022. 1, 2
+

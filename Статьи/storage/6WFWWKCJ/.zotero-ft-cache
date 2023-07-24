@@ -1,0 +1,1038 @@
+Universal Backdoor Attacks Detection via Adaptive Adversarial Probe
+
+Yuhang Wang1 , Huafeng Shi1 , Rui Min1 , Ruijia Wu1 , Siyuan Liang2 , Yichao Wu1 Ding Liang1 , Aishan Liu3∗
+1SenseTime Research 2Institute of Information Engineering, Chinese Academy of Sciences
+3NLSDE, Beihang University, Beijing, China
+
+arXiv:2209.05244v3 [cs.CV] 7 Dec 2022
+
+Abstract
+Extensive evidence has demonstrated that deep neural networks (DNNs) are vulnerable to backdoor attacks, which motivates the development of backdoor attacks detection. Most detection methods are designed to verify whether a model is infected with presumed types of backdoor attacks, yet the adversary is likely to generate diverse backdoor attacks in practice that are unforeseen to defenders, which challenge current detection strategies. In this paper, we focus on this more challenging scenario and propose a universal backdoor attacks detection method named Adaptive Adversarial Probe (A2P). Speciﬁcally, we posit that the challenge of universal backdoor attacks detection lies in the fact that different backdoor attacks often exhibit diverse characteristics in trigger patterns (i.e., sizes and transparencies). Therefore, our A2P adopts a global-to-local probing framework, which adversarially probes images with adaptive regions/budgets to ﬁt various backdoor triggers of different sizes/transparencies. Regarding the probing region, we propose the attention-guided region generation strategy that generates region proposals with different sizes/locations based on the attention of the target model, since trigger regions often manifest higher model activation. Considering the attack budget, we introduce the box-to-sparsity scheduling that iteratively increases the perturbation budget from box to sparse constraint, so that we could better activate different latent backdoors with different transparencies. Extensive experiments on multiple datasets (CIFAR-10, GTSRB, Tiny-ImageNet) demonstrate that our method outperforms state-of-the-art baselines by large margins (+12%).
+1. Introduction
+DNNs have shown strong potential in various areas including computer vision, natural language processing, and acoustics [4, 10, 14]. Currently, machine Learning as a Ser-
+Our codes will be available upon paper publication.
+
+Clean Data
+
+…
+Poison
+
+Backdoor Attacks
+Patch-based
+Infected Models
+Backdoor Detection
+
+…
+
+Blend-based Training
+
+Sample-specific
+
+…
+
+Detecting Infected
+
+Uninfected
+
+Figure 1. Previous backdoor detection methods focus on detecting whether a model is infected with a presumed type of backdoor attack. In this paper, we focus on the more challenging scenario, where defenders aim to identify infected models that might be embedded with diverse types of unforeseen backdoor attacks.
+
+vice (MLaaS) platforms have emerged to outsource welltrained deep learning models for developers since it often requires high computational resources for training highquality DNNs. However, severe security issues exist when using online platforms due to the black-box training process. For example, adversaries could manipulate model behaviors with speciﬁc trigger patterns when inference by embedding backdoors [7] into models during training.
+To mitigate the threats brought by backdoor attacks, a long line of backdoor attacks detection methods has been proposed [3, 5, 9, 31, 33, 35]. Generally, the mainstream backdoor detection could be roughly divided into pre-training (i.e., whether the training example is poisoned) and post-training (i.e., whether the model is infected) detection. Since the training dataset is often hard to access for defenders, this paper primarily focuses on a more practical scenario of post-training detection, i.e., detecting whether a model is injected with the backdoor. Based on the unavailability of poisoned training data, current detection methods
+
+1
+
+often presume prior knowledge of backdoor triggers and focus on detecting speciﬁc types of backdoor attacks. For example, [7, 8] could effectively detect backdoor attacks with small trigger patterns while failing in large trigger patterns. However, in practice, the adversary is likely to embed diverse backdoor attacks containing different trigger patterns that are unforeseen to defenders (e.g., invisible [22] and sample-speciﬁc [23]), which highly challenge the generalization of existing backdoor detection methods.
+In this paper, we focus on universal post-training backdoor detection against diverse unforeseen backdoor attacks. Speciﬁcally, we posit that universal backdoor attacks detection should overcome the challenge of the diverse characteristics of trigger patterns (i.e., sizes and transparencies). Therefore, we propose Adaptive Adversarial Probe (A2P) approach, which utilizes adversarial perturbation as a probe to activate model shortcut for backdoor identiﬁcation. In particular, our approach works in a global-to-local manner, where we adaptively adjust our adversarial probes in the probing regions and budgets to ﬁt the diverse trigger sizes and transparencies brought by different types of unforeseen backdoor attacks. Regarding the probing region, we propose the attention-guided region generation strategy that generates region proposals with different sizes/locations based on the attention of the target model, since trigger regions often manifest higher model activation. Considering the attack budget, we introduce the box-to-sparsity scheduling that iteratively increases the perturbation budget from box to sparse constraint, so that we could better activate different latent backdoors with different trigger transparencies. Extensive experiments on CIFAR-10, GTSRB, and Tiny-ImageNet demonstrate that our A2P achieves promising performance in detecting diverse unforeseen backdoor attacks and outperforms existing baselines by large margins (+12%). Our contributions are:
+• We propose A2P framework that works in a globalto-local probing manner to detect infected models that may be embedded with diverse unforeseen backdoors.
+• For the region, we propose the attention-guided region generation for generating different attacking region proposals; for the budget, we introduce the box-tosparsity scheduling that iteratively increases the budgets from box to sparse constraint.
+• Extensive experiments demonstrate that our A2P could achieve promising performance on diverse unforeseen backdoor attacks, and outperform others largely.
+2. Related Work
+2.1. Backdoor Attack
+Backdoor attack mainly affects the training process and forces a mapping between the trigger pattern and the tar-
+
+get label. The models embedded with backdoors show malicious behavior when the input image is tampered with a trigger, otherwise, behave normally. [7] ﬁrst proposed BadNets by sticking a patch-based trigger on the training data and changing their labels to a speciﬁc target class (dirtylabel attack). Meanwhile, [19] optimized the trigger pattern and implemented the backdoor attack using transfer learning. However, the patch-based trigger could be detected by humans easily which motivates the researches on designing more stealthy backdoor attacks. [2] poisoned the training dataset with a global pattern and increased trigger transparency to evade human inspection. [23] designed both a mask and trigger generator to generate sample-speciﬁc triggers. [22] utilized image wrapping to make the poisoned image natural-looking. Besides these dirty-label attacks, other attacks [1, 25, 32, 37] considered poisoning the data in the target class without changing the original label (clean-label attack), which further increase the stealthiness of attacks.
+2.2. Backdoor Detection
+To mitigate backdoor attacks, a long line of detection methods has been proposed. Typically, current backdoor detection could be divided into poisoned dataset detection (pre-training) [5, 31] and backdoor model detection (posttraining) [33]. Since the poisoned dataset is often hard to access, this paper considers a more practical scenario to detect whether a model is embedded with backdoor attacks in the post-training stage. Neural Cleanse [33] ﬁrst identiﬁed the shortcut in the infected models and detected the backdoor based on trigger reconstruction. The following work [9, 24, 35, 38] tried to improve the detection accuracy based on the similar trigger reconstruction framework. Some work even focused on black-box setting [8] with only hard output labels and distinguished backdoor models using peak values in adversarial maps. However, these methods are less effective in detecting large triggers. Recently, studies [12, 36] also used extra classiﬁers to detect models with more types of backdoor attacks, but they still failed to detect unforeseen backdoor attacks. A concurrent study [34] implemented a universal backdoor detection method via MM statistics. However, they only focus on patch-based backdoors and utilize targeted attack to optimize perturbations that inefﬁciently considers each class as the the target.
+In contrast to previous studies that primarily focus on presumed backdoor attacks with prior knowledge, we focus on a more practical scenario, where defenders have no prior presumptions and would face diverse unforeseen backdoor attacks with various trigger sizes and transparencies.
+2.3. Adversarial Attack
+Adversarial attacks are inputs intentionally designed to mislead deep learning models during inference but are imperceptible to human visions [6, 30]. Speciﬁcally, the ad-
+
+2
+
+versarial perturbation δi for each image xi should satisfy
+
+fθ(xi + δi) = yi, s. t. δi ≤ ,
+
+(1)
+
+where · represents the distance metric ( 1, 2, or ∞norm), yi denotes the ground-truth label for the image, and represents the perturbation budget. A long line of work has been proposed to attack deep learning models [6, 15, 17, 18], which could be roughly divided into whitebox and black-box attacks based on the access to the target model. In this paper, we use the adversarial attack as a probe to help diagnose whether the model is embedded with backdoor attacks.
+
+3. Threat Model
+
+3.1. Problem Deﬁnition
+
+This paper focuses on image classiﬁcation task, where a classiﬁer fθ maps input image x ∈ Xtrain to label y ∈ Ytrain. Backdoor attacks aim to cheat model fθ through injecting poisoned data in the training phase, so that the infected model would behave maliciously when the inputs are embedded with triggers while behaving normally on clean examples. Speciﬁcally, the adversary selects a portion of clean training data {x1, ..., xn} and generates poisoned images {xˆ1, ..., xˆn} for model backdoor training
+
+xˆi = φ(xi, T ),
+
+(2)
+
+where function φ is the predeﬁned backdoor attack that generates poisoned images by adding the trigger T . The models embedded with backdoors would give target label predictions fθ(xˆi) = yt on test images xˆi with triggers.
+In practice, adversaries are likely to inject different types of unforeseen backdoor attacks to escape the backdoor detection. Thus, the trigger pattern should be formalized as T = (µ, σ), where µ is the trigger pattern and σ is the pattern embedding strategy. Based on that, backdoor trigger injection can be generalized as
+
+xˆi = φ(xi, T ) = φ(xi, (µ, σ)).
+
+(3)
+
+In particular, for the patch-based attack, µ represents the patch trigger, and σ denotes the binary mask ensuring the pattern’s location; for the blend-based attack, µ is the predeﬁned image (e.g., hello kitty and Gaussian noise) and σ indicates trigger transparency; for the sample-speciﬁc attack, σ denotes the parameters of the trigger generation network g, and µ = gσ(x) is the trigger pattern for each image.
+
+3.2. Goals and Challenges
+
+In this paper, we focus on the post-training backdoor detection, i.e., whether a model is infected by backdoor attacks. In contrast to previous backdoor detection that assumes the model is embedded with a speciﬁc type of backdoor attack, we focus on a more complex and practical
+
+scenario, where defenders have no prior presumptions and would face diverse types of backdoor attacks.
+We ﬁrst revisit the classic backdoor detection framework that utilizes reverse engineering to generate the simulated trigger T˜ = (µ˜, σ˜ ) for each target label yt without accessing the training data. Speciﬁcally, the optimization objective using N test images could be formulated as
+
+N
+
+arg min
+µ˜ ,σ˜
+
+L(fθ(φ(xi, (µ˜, σ˜ )), yt) + β σ˜ 1 ,
+
+(4)
+
+i=1
+
+where L(·) is the cross-entropy loss and σ˜ is the mask for reversed trigger µ˜. Such detection framework relies on indispensable assumptions on the backdoor attack type as (1) the reversed trigger to the target class should be small in size, and (2) all images share the same reversed trigger. However, a more practical scenario containing diverse unforeseen backdoor attacks is challenging for defenders due to: Challenge : Different backdoor attacks vary in trigger pattern sizes and are often placed in different locations. Challenge : Different backdoor attacks tend to manifest different trigger pattern transparencies visually.
+Since there exists no prior knowledge of the characteristics of input backdoor attacks, it is highly non-trivial to directly apply existing methods in this scenario, which would degrade their performance and even fail on unforeseen backdoor attacks.
+
+4. Adaptive Adversarial Probe Approach
+
+4.1. Global-to-Local Probing Framework
+
+Generally, we aim to implement a universal backdoor detection framework without any prior assumption on backdoor triggers which is applicable for a more practical scenario. Since previous work [21] has revealed the close connection between adversarial perturbations and trigger patterns, it is feasible to utilize adversarial perturbations as a probe to detect latent backdoors. However, directly injecting adversarial perturbations on the whole image may not sufﬁce to detect multiple types of backdoor attacks, since such correlation is highly affected by the sizes and transparencies of trigger patterns. Therefore, we propose the A2P framework by adaptively adjusting the attack region r (probe location) and attack budget (probe strength) in a multi-stage manner to ﬁt various backdoor trigger patterns. In each stage t, we adversarially probe the model by p(it) as
+
+p(it) = arg
+
+ri(t)
+
+max
+δi(t) ∞≤
+
+(t)
+
+L(fθ (xi
+
++
+
+ri(t)
+
+δi(t)), yi), (5)
+
+where δi(t) is the adversarial perturbation controlled by budget (t), and ri(t) ∈ {0, 1}W ×H is the region mask.
+
+3
+
+Input
+
+Attention-Guided Region Generation
+
+gradient
+
+gradient
+
+gradient
+
+Detection
+MAD Outlier Detector
+
+Model Images
+
+region 𝒓(𝟎)
+⨀
+
+…
+region 𝒓(𝟏)
+⨀
+
+budget 𝜺(𝟎) 𝑥0
+Stage 0
+
+budget 𝜺(𝟏) 𝑥1
+𝑥2 Stage 1
+
+Box-to-Sparsity Budget Scheduling
+
+region 𝒓(𝒕)
+⨀
+
+budget 𝜺(𝒕) z 𝑥𝑡
+
+Stage t x
+
+y
+
+ℓ2
+
+ℓ∞
+
+𝑛𝑜𝑟𝑚 𝑛𝑜𝑟𝑚
+
+ℓ0 𝑛𝑜𝑟𝑚
+
+Uninfected Infected
+
+Figure 2. Our A2P works in a global-to-local probing manner. In each stage, our attention-guided region generation module ﬁrst shrinks the probing region based on the gradients of the target model; our box-to-sparsity budget scheduling module then iteratively increases and ﬁnds the appropriate probing budget on the attack region; the generated adversarial examples will be ﬁnally sent into an outlier detector for subsequent infected model identiﬁcation.
+
+Figure 3. Model attention of inputs with triggers using GradCAM [27] (three images with patch-based triggers and two images with blend-based triggers). The trigger region derives the most attention (gradients) from infected models.
+To link individual stages together, we design a globalto-local probe search strategy that starts by injecting adversarial perturbation on the global image region and gradually shrinks the attack region. At each stage, we generate an individual mask for each image based on our attentionguided region generation strategy and constrain probe locations within the masked area; we utilize the proposed boxto-sparsity budget scheduling strategy to iteratively ﬁnd the proper probing strength on the attack region; the generated adversarial examples will be sent into an outlier detector for subsequent infected model identiﬁcation. Our framework is illustrated in Figure 2.
+4.2. Attention-Guided Region Generation
+Rethinking our probe-based detection framework, our objective is to automatically search an optimal region for adversarial probing, which could deviate the clean inputs away from their ground-truth labels to activate the latent backdoor. As challenge  stated, different backdoor attacks tend to have different trigger pattern sizes with different locations (e.g., patch-based attacks have patch triggers while blend-based attacks show global semi-transparent triggers). Therefore, the attack region is critical to ensure detection
+
+performance and efﬁciency. To address the above challenge, our probing strategy
+should adaptively adjust the attacking region to better ﬁt the backdoor triggers of different sizes/locations, so that we could activate the latent backdoor. For example, patchbased attacks are sensitive to a local perturbation, while blend-based attacks could be activated by a global range of perturbations (more details could be found in Section 5.5).
+However, directly applying random region search or generation on the whole image is computationally insufﬁcient. We observe that models embedded with backdoors would easily focus on the trigger region due to the internal shortcut, manifested as large model attention near the trigger region (as shown in Figure 3). Therefore, we propose the attention-guided region generation strategy based on the attention (gradients) of the target model to perform region generation. Speciﬁcally, given a sample xi, we generate the corresponding attack region ri(t) at each stage t using the attention-guided region generation strategy as
+ri(t) = top α× ri(t−1) 1 (∇xi+p(it−1) L(fθ(xi+p(it−1)), yi)), (6)
+where α ∈ (0, 1) is the scale parameter for region shrinking. top generates a binary mask by selecting the region with top α × ri(t−1) 1 gradient values and discarding the rest pixels. Notably, the 1-norm of ri(t) is the same for all samples within the same stage.
+In summary, we search for the optimal region of adversarial attack by attention-guided region generation. We ﬁrst generate global perturbations to simulate blend-based triggers and set α to 0.5; we then shrink the region in half until
+
+4
+
+Predicted Labels
+
+Predicted Labels
+
+0 0 28 44 23 26 30 25 22 48 40
+
+1 4 0 3 1 0 0 11 3 4 31
+
+40
+
+2 38 4 0 13 23 17 27 16 19 7
+
+3 15 3 19 0 22 27 19 13 5 4
+
+30
+
+4 14 1 7 8 0 5 3 23 2 1
+
+5 0 0 5 25 6 0 5 12 0 3
+
+20
+
+6 3 14 13 7 12 9 0 5 13 1
+
+74 4 2 1 4 6 0 0 1 3
+
+10
+
+8 19 16 2 9 3 3 6 1 0 10
+
+9 3 30 5 13 4 3 4 5 8 0
+
+0 1 2 T3rue4 La5bel6s 7 8 9
+
+0
+
+(a) target label = 0
+
+0 0 7 12 2 1 1 6 8 31 12
+
+40
+
+1 11 1 4 2 1 0 4 4 6 20
+
+35
+
+2 28 10 0 13 20 12 20 7 11 7
+
+30
+
+3 3 4 16 0 31 34 30 11 4 9
+
+25
+
+4 16 9 26 25 0 16 21 28 11 4
+
+5 0 5 12 33 10 0 5 29 2 9
+
+20
+
+6 3 6 18 14 15 22 0 4 13 10
+
+15
+
+7 3 7 6 3 13 9 7 0 4 7
+
+10
+
+8 24 10 3 2 5 6 4 2 0 15
+
+5
+
+9 12 41 3 6 4 0 3 7 18 7
+0 1 2 T3rue4 La5bel6s 7 8 9
+
+0
+
+(c) clean
+
+Predicted Labels
+
+Predicted Labels
+
+0 0 15 38 34 30 26 43 15 39 30
+
+60
+
+11 0 1 0 0 0 2 2 1 1
+
+2 22 6 0 24 10 15 28 16 11 8
+
+50
+
+3 21 6 14 0 22 25 22 17 8 6
+
+40
+
+4 18 0 7 2 0 1 4 12 1 0
+
+51 0 2 1 0 0 0 2 0 0
+
+30
+
+6 33 64 35 38 38 31 0 33 40 54
+
+20
+
+71 0 0 0 0 0 0 0 0 1
+
+82 1 1 1 0 0 1 0 0 0
+
+10
+
+91 8 2 0 0 2 0 3 0 0
+
+0 1 2 T3rue4 La5bel6s 7 8 9
+
+0
+
+(b) target label = 0
+
+00 4 5 0 1 0 1 1 5 1
+
+60
+
+12 0 2 0 0 0 1 1 0 9
+
+2 30 8 0 27 15 16 33 12 11 10
+
+50
+
+3 5 0 3 0 21 38 16 6 8 5 4 16 0 16 32 0 8 41 32 7 3
+
+40
+
+50 0 3 4 0 0 1 4 0 0
+
+30
+
+6 37 44 66 34 60 37 0 42 62 57 70 3 1 0 2 0 3 0 0 1
+
+20
+
+8 6 7 1 2 1 1 1 1 0 14
+
+10
+
+9 4 34 3 1 0 0 3 1 7 0
+0 1 2 T3rue4 La5bel6s 7 8 9
+
+0
+
+(d) clean
+
+Figure 4. Confusion matrix of model predictions on global adversarial attacks with different budgets. (a) infected model with small budget (8/255); (b) infected model with large budget (32/255); (c) clean model with small budget; (d) clean model with large budget.
+
+the region is less than 3% of the whole image.
+4.3. Box-to-Sparsity Budget Scheduling
+After ﬁnding the optimal region, the next step is to inject adversarial probes into the image. However, as challenge  indicated, different trigger transparencies also impact the detection performance. Thus, a question emerges: can we modify the attack budget to an arbitrary value?
+To explore the problem, we conduct adversarial attacks on the whole image region with different attack budgets (as shown in Fig 4). On one hand, with a proper attack budget, the output of infected models would skew to the target label, while the clean models show no obvious deviation; on the other hand, if the attack budget is increased to a large value (e.g., 32/255), the model output would collapse due to the excessive attack, which leads to a nearly 100% Attack Success Rate of adversarial examples (ASR-A). Therefore, we should ﬁnd a suitable budget within the speciﬁc region, which satisﬁes (1) the adversarial probe could successfully activate the latent backdoor and (2) the budget value does not damage model predictions.
+To ﬁnd a suitable budget that meets the above requirements, we formulate the budget generation process as
+
+δi∗(t)
+
+=
+
+arg
+
+max(L(fθ (xi
+δi(t)
+
++
+
+ri(t)
+
+δi(t)), yi) + λ δi(t) ∞),
+
+s. t.
+
+1 N
+
+N
+I(fθ(xi + ri(t)
+
+i=1
+
+δi(t)) = yi) − β ≤ η, (7)
+
+where I is the indicator function, β is the attack boundary
+
+which ensures a non-excessive attack, λ is the balancing parameter, and η deﬁnes the margin that forces ASR-A to be close to β.
+In order to solve the above optimization problem, we propose the box-to-sparsity budget scheduling strategy. Firstly, at the initial stage t0, we set our attacking region r(0) as the whole image, while the attacking budget (0) as 4/255. Obviously, the attack at the initial stage follows the commonly-used setting in the adversarial attack which could be treated as a box-constrained attack. Notably, we regard the ASR-A of the initial stage as the attack boundary β. As the region shrinks, we incrementally improve the attack budgets to ﬁnd an optimal value, which satisfy that the ASR-A is close to β but not exceed for excessive attacks.
+As the stage continues, we iteratively increase the attack budget while reducing the perturbing region without limitation on the values of the adversarial attacks. From this point of view, our attack area becomes sparser, and our adversarial perturbations are scheduled from the box constraint (e.g., 2) to the sparse constraint ( 0). Thus, the budget for stage t should be formulated as
+
+(t) =
+
+(t−1)+κ×(β− 1 N
+
+N
+
+I(fθ(xi+p(it)) = yi)), (8)
+
+i=1
+
+where κ controls incremental step size for budget based on the ASR-A at stage t. Speciﬁcally, we ﬁrst calculate the ASR-A under ri(t) and (t−1). Then, we increase the budget based on the residuals between the ASR-A and β and repeatedly conduct the adversarial attack until ﬁnding a budget that leads ASR-A to be close to β. To be noted, we set the maximum attack times for each stage to 3.
+To sum up, we adjust the attack budget via the box-tosparsity scheduling which simulates different trigger patterns to ensure the diversity of hidden backdoor activation (see Section 5.4 for discussions).
+
+4.4. Overall Detection Process
+
+Our overall detection process could be regarded as a global-to-local multi-stage detection pipeline. Starting from the whole region, we generate the global adversarial perturbation with the initial budget. For each stage, our attentionguided region generation strategy ﬁrst takes model gradients as the criterion to search for the optimal probing region; then, our box-to-sparsity budget scheduling strategy iteratively generates adversarial perturbations and injects into the speciﬁc areas; ﬁnally, with the generated adversarial examples as inputs, we then calculate the softmax outputs of adversarial examples and utilize MAD to detect the outliers.
+The model is identiﬁed as a backdoor model only if the anomaly index is larger than the threshold and the overall detection would stop. Otherwise, the detection would continue and repeat the process until the last stage. The model
+
+5
+
+passing through all the detection stages would be considered as a clean (uninfected) model.
+5. Experiments
+5.1. Experimental Setups
+We ﬁrst illustrate the experimental setups in this part. Datasets and architectures. We conduct experiments on image classiﬁcation tasks using CIFAR-10 [13], GTSRB [29], and Tiny-ImageNet [16] datasets. For model architectures, we use ResNet-18 [10], VGG19 [28], DenseNet161 [11], and MobileNet-V2 [26]. Backdoor attacks. We choose 4 commonly-adopted backdoor attacks with different trigger patterns for evaluation including BadNets [7], Blend [2], WaNet [22], and Input-aware [23]. For BadNets (patch-based attack), we utilize white square as the backdoor trigger and implement two trigger sizes (i.e., small-scale denoted “BadNets-s” and large-scale denoted “BadNets-l”); for Blend (blend-based attack), we use both Gaussian Noise and Hello Kitty as patterns and implement two trigger transparencies (i.e., lowscale denoted “Blend-l” and high-scale denoted “Blend-h”); for WaNet and Input-aware (sample-speciﬁc attack), we use the default settings [22, 23]. For each attack, we build 60 infected models and 60 benign models evenly distributed over the four architectures on each dataset. Following [8], we randomly select one target label for each infected model and inject 10% poisoned samples into training data making the average Attack Success Rate ≥ 90%. Detection baselines. We compare our A2P with the state-of-the-art post-training backdoor detection methods Neural Cleanse (NC) [33] and DF-TND [35]. Speciﬁcally, for each dataset, we randomly select 40 test samples evenly from each class to inject adversarial perturbations. Implementation details. For adversarial attacks, we adopt the commonly-used PGD attack [20] to perform white-box untargeted attacks. We take 40 steps to optimize adversarial perturbations and set the step size to 0.001. For our MAD detector, we set the threshold as τ = 3.5 for CIFAR-10, τ = 6.5 for GTSRB, and τ = 10.0 for TinyImageNet. Evaluation metrics. Following [12], we use The Area under Receiver Operating Curve (AUROC) and Detection Accuracy (ACC) to evaluate the detection performance on speciﬁc types of attacks. We also report Average Attacks to calculate the average detection ACC on several types of backdoor attacks. For each metric, higher values mean better performance of backdoor detection.
+5.2. Comparison with Other Baselines
+We ﬁrst compare A2P with other backdoor detection methods on different attacks. As shown in Table 1, our A2P framework achieves signiﬁcantly higher values on Average
+
+Attacks than others, which demonstrates the overall better performance across different attacks and datasets. We could draw several conclusions below.
+(1) For patch-based attacks (BadNets), A2P exhibits stable detection ability against attacks with different trigger sizes, while NC and DF-TND turn out to show weak performance on large triggers (BadNets-l). We attribute this to the particular searching strategy of A2P, which could well ﬁt backdoor triggers with different sizes.
+(2) For blend-based attacks (Blend), A2P achieves higher ACC and AUROC than other baselines across three different datasets. We also notice that A2P is stable against blend-based triggers with different transparencies and achieves an overall detection accuracy of over 99%. We will further explore the detection stability of A2P with different trigger transparencies in Section 5.3.
+(3) For sample-speciﬁc attacks (WaNet and Inputaware), we found that our proposed A2P achieves the highest performance in almost all cases across the datasets. However, we should also notice that all methods show comparatively weak detection ability on this type of backdoor attack, which indicates the strong attacking ability of the generated triggers for each speciﬁc image.
+(4) To better illustrate the general detection performance over different types of backdoor attacks, we also report the Average Attacks values, which demonstrate that A2P exhibits signiﬁcantly better performance across different datasets and outperforms an average of +12% Average Attacks compared to baselines.
+(5) Apart from ACC, we also observe that the overall AUROC of A2P is higher than others with an average value of 0.958. Such results demonstrate that the high backdoor detection performance (ACC) of A2P does not sacriﬁce the performance on uninfected models.
+To sum up, A2P achieves the best performance compared to existing backdoor detection approaches on detecting diverse unforeseen backdoor attacks across different settings, especially for some invisible attacks (e.g., Blend attack).
+5.3. Detection on More Rigorous Scenarios
+In this section, we further investigate the detection performance of our A2P in more rigorous settings.
+Different trigger sizes. We ﬁrst evaluate our A2P on triggers with different sizes. Speciﬁcally, we utilize BadNets (white square as the trigger) with different sizes ranging from 2 × 2 to 14 × 14, and we train 24 infected models for each size on CIFAR-10 using ResNet-18. As shown in Figure 5(a), our A2P shows the best performance on triggers with different sizes. However, NC decreases signiﬁcantly and shows less robustness as the trigger size is larger than 12 × 12; DF-TND is comparatively stable, yet it still falls behind compared to our A2P. More speciﬁcally, our A2P remains effective with ACC ≥ 62.5% even if the trig-
+
+6
+
+Table 1. Backdoor attacks detection results (ACC, AUROC) on three datasets. We also report Average Attacks that measures the average detection performance across all backdoor attacks. For all metrics, higher values indicate better performance.
+
+Detection Results
+
+Attack
+
+Method
+
+CIFAR-10
+
+GTSRB
+
+Tiny-ImageNet
+
+ACC(%) AUROC ACC(%) AUROC ACC(%) AUROC
+
+NC
+
+90.000
+
+0.945
+
+100.000
+
+0.978
+
+63.333
+
+0.851
+
+-s DF-TND
+
+98.333
+
+0.999
+
+100.000
+
+1.000
+
+78.333
+
+0.885
+
+BadNets
+
+A2P (Ours) NC
+
+96.667 73.333
+
+0.986 0.865
+
+98.333 91.667
+
+0.998 0.949
+
+73.333 18.333
+
+0.879 0.403
+
+-l DF-TND
+
+91.667
+
+0.974
+
+90.000
+
+0.971
+
+41.667
+
+0.732
+
+A2P (Ours) 93.333
+
+0.976
+
+93.333
+
+0.992
+
+48.333
+
+0.742
+
+NC
+
+58.333
+
+0.834
+
+93.333
+
+0.961
+
+80.000
+
+0.936
+
+-h DF-TND
+
+56.667
+
+0.799
+
+58.333
+
+0.784
+
+51.667
+
+0.792
+
+Blend
+
+A2P (Ours) NC
+
+98.333 96.667
+
+0.995 0.981
+
+100.000 91.667
+
+1.000 0.958
+
+98.333 96.667
+
+0.978 0.986
+
+-l DF-TND
+
+58.333
+
+0.801
+
+61.667
+
+0.809
+
+50.000
+
+0.679
+
+A2P (Ours) 98.333
+
+0.990
+
+100.000
+
+1.000
+
+100.000
+
+0.991
+
+NC
+
+86.667
+
+0.910
+
+40.000
+
+0.711
+
+71.667
+
+0.874
+
+WaNet
+
+DF-TND
+
+66.667
+
+0.825
+
+63.333
+
+0.815
+
+68.333
+
+0.841
+
+A2P (Ours) 90.000
+
+0.969
+
+88.333
+
+0.989
+
+78.333
+
+0.929
+
+NC
+
+20.000
+
+0.531
+
+66.667
+
+0.878
+
+6.6667
+
+0.630
+
+Input-aware
+
+DF-TND
+
+43.333
+
+0.681
+
+60.000
+
+0.843
+
+18.333
+
+0.638
+
+A2P (Ours) 36.667
+
+0.830
+
+74.000
+
+0.968
+
+13.333
+
+0.691
+
+NC
+
+70.833
+
+0.844
+
+80.556
+
+0.906
+
+56.111
+
+0.780
+
+Average Attacks
+
+DF-TND
+
+69.167
+
+0.847
+
+72.222
+
+0.870
+
+51.389
+
+0.761
+
+A2P (Ours) 85.556
+
+0.958
+
+92.333
+
+0.991
+
+68.611
+
+0.868
+
+1.0
+
+1.0
+
+0.8
+
+0.8
+
+0.6
+
+0.6
+
+0.4
+
+0.4
+
+0.2
+
+A2P (ours) NC
+
+0.2
+
+AN2CP (ours)
+
+DF-TND
+
+DF-TND
+
+0.0 2x2 4x4 6xT6rigg8exr8 Si1z0ex10 12x12 14x14 0.0 0.7 0.T75rigge0r.8Trans0.p8a5renc0y.9 0.95
+
+(a)
+
+(b)
+
+Figure 5. Detection performance with different trigger patterns on CIFAR-10: (a) trigger sizes and (b) trigger transparencies.
+
+ger size expands to the exaggerated size 14 × 14, which takes almost 20% of the whole image. The results demonstrate that A2P is stable to trigger sizes.
+Different trigger transparencies. We then evaluate our A2P on triggers with different transparencies. Speciﬁcally, we use Blend attack on CIFAR-10 with trigger transparencies from 0.7 to 0.95. For each trigger transparency, we train 24 infected models using ResNet-18. Figure 5(b) shows that A2P remains effective against all trigger transparencies with ACC ≥ 66.67%, while NC and DF-TND perform worse when trigger transparency is high (0.95) or low (0.7).
+Multiple triggers within a single image. We also consider a setting where multiple triggers are simultaneously injected into a single image for training/testing. Speciﬁcally, we generate the backdoor trigger by randomly modifying pixels within a 3×3 area at four corners. Experimental
+
+results reveal that the accuracy of A2P would still be stable (ACC ≥ 97.5%) as the trigger number increases.
+5.4. Ablation Studies
+Attention-guided search. To evaluate the effectiveness of our attention-guided strategy, we take the random search as a comparison, where we use 40 BadNets models and 40 clean models trained on CIFAR-10 using ResNet-18. Speciﬁcally, we shrink the region with the scale parameter set to 0.5 and utilize the box-to-sparsity budget scheduling. As shown in Figure 6(a), our attention-guided strategy achieves a higher average detection ACC with a large margin compared to the random strategy. Figure 6(b) shows the results on clean models, where our attention-guided region generation manifests more stability than random search.
+Box-to-Sparsity budget scheduling. We then compare our budget scheduling strategy with “Conservative” that increases budgets by 2/255 and “Radical” that increases budgets exponentially. We use 40 infected models by BadNets and 40 clean models on CIFAR-10 using ResNet-18. As shown in Figure 7, we could observe that our box-tosparsity budget scheduling achieves the highest average detection ACC compared to other baselines, and also show better performance on clean models.
+Sample numbers in each class. Since we utilize the tendency of softmax output on samples in the infected labels for detection, we further study the inﬂuence of sample numbers in each class. With the increasing of sample num-
+
+ACC ACC
+
+7
+
+ACC
+
+ACC
+
+Anomaly Index
+
+1.0
+
+1.0
+
+0.8
+
+0.8
+
+0.6
+
+0.6
+
+ACC
+
+0.4
+
+0.4
+
+0.2
+
+Random
+
+0.2
+
+Random
+
+Attention-guided
+
+Attention-guided
+
+0.0 0
+
+2
+
+4Stage6
+
+8
+
+10
+
+0.0 0
+
+2
+
+4Stage6
+
+8
+
+10
+
+(a)
+
+(b)
+
+Figure 6. Comparison between different region generation strategies. (a): infected models by BadNets, and (b): clean models.
+
+1.0
+
+0.8
+
+0.6
+
+0.4 0.2 0.0 0
+
+Conservative Box-to-Sparsity Radical
+2 4Stage6
+
+(a)
+
+1.0
+
+0.8
+
+0.6
+
+ACC
+
+0.4
+
+0.2
+
+8
+
+10
+
+0.0 0
+
+Conservative Box-to-Sparsity Radical
+
+2
+
+4Stage6
+
+8
+
+10
+
+(b)
+
+Figure 7. Comparison among different budget scheduling strategies. (a): infected models by BadNets, and (b): clean models.
+
+35
+
+Clean
+
+30
+
+BadNets Blend
+
+25
+
+20
+
+15
+
+10
+
+5
+
+0 2x2
+
+4x4 Regi8oxn8 Size 16x16 32x32
+
+(a) Attack region
+
+Anomaly Index
+
+20.0
+
+Clean
+
+17.5
+
+BadNets Blend
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+2/255 4/255 8/2B5u5dg1e6/t255 32/255 64/255
+
+(b) Attack budget
+
+Figure 8. Adversarial perturbations v.s. backdoor triggers studies.
+
+bers in each class, our A2P shows better detection performance. Importantly, our A2P remains effective with ACC ≥ 90% even if the number of samples in each class reduces to 5.
+5.5. Analysis and Discussion
+In this section, we provide more studies and analyses to better understand our A2P framework.
+Adversarial perturbations v.s. backdoor triggers. We here study the relationship between adversarial perturbations and different triggers in terms of attack regions/budgets to better understand our framework. Specifically, we select 10 clean models, 10 infected models by BadNets, and 10 infected models by Blend. All models are trained on CIFAR-10 using ResNet-18.
+We ﬁrst study the perturbation region on backdoor detection, where we select the bottom right square corner of images to perform PGD attacks bounded with a ﬁxed budget (8/255). The size changes from 2 × 2 to 32 × 32. The BadNets triggers are also placed at the bottom right corner.
+
+Table 2. Backdoor elimination with A2P. ACC is the accuracy on clean data, while ASR-B represents the attack success rate of backdoor attacks on models. “Original Trigger” and “Random Noise” indicate ﬁne-tuning with original trigger patterns or noise patterns. “No Patching” indicates ﬁne-tuning with clean data.
+
+Before Fine-tune No Patching
+Original Trigger Random Noise Reversed Trigger (Ours)
+
+BadNets(%)
+
+ACC↑ ASR-B↓
+
+93.29
+
+99.53
+
+92.16
+
+99.64
+
+91.26
+
+0.16
+
+91.33
+
+97.69
+
+91.43
+
+1.96
+
+Blend(%)
+
+ACC↑ ASR-B↓
+
+93.31
+
+100
+
+93.09
+
+100
+
+91.02
+
+0.43
+
+88.46
+
+35.63
+
+90.53
+
+0.7
+
+As shown in Figure 8(a), we observe that (1) for Blend, the detection performance increases as the region size improves and the infected model could be easily detected when the region size is larger than 16 × 16; and (2) for BadNets, the anomaly index of infected models remains comparatively low. We conjecture it is due to the incorrect adversarial perturbation budget. We then investigate the perturbation budget on backdoor detection, where we choose 6 budgets ranging from 2/255 to 64/255 in terms of ∞-norm with ﬁxed attacking region size (2 × 2) on the bottom right corner. As shown in Figure 8 (b), we observe that (1) BadNets attack is gradually activated as the budget increases; however (2) the Blend attack is difﬁcult to activate.
+Thus, we could draw the conclusion that adversarial perturbations could be simulated as backdoor triggers for backdoor detection only if the region and budget are appropriate.
+Backdoor elimination using A2P. Since our generated probes manifest strong similarities with triggers, we therefore explore whether our probe could be utilized for backdoor elimination via model ﬁne-tuning. Following [33], we select 10% samples from CIFAR-10 training set and choose 20% of them to add adversarial probes using A2P. We then ﬁne-tune infected models for only 1 epoch. As shown in Table 2, our A2P could effectively eliminate the latent backdoors by reducing the average attack success rate of backdoor attacks to < 2% with limited ACC drop (< 2.8%).
+6. Conclusion
+In this paper, we propose Adaptive Adversarial Probe (A2P) framework for backdoor attacks detection in a more complex scenario, where models might be embedded with diverse unforeseen backdoor attacks. Speciﬁcally, our A2P adopts a global-to-local probing framework, which adversarially probes images with adaptive regions/budgets using our proposed attention-guided region proposal and box-tosparsity budget scheduling modules, which could better ﬁt various backdoor triggers of different sizes/transparencies. Extensive experiments demonstrate that our A2P framework outperforms other comparisons by large margins (+12% on Average Attacks). In the future, we are interested in proposing an end-to-end learning solution.
+
+8
+
+References
+[1] Mauro Barni, Kassem Kallas, and Benedetta Tondi. A new backdoor attack in cnns by training set corruption without label poisoning. In 2019 IEEE International Conference on Image Processing (ICIP), pages 101–105. IEEE, 2019. 2
+[2] Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep learning systems using data poisoning. arXiv preprint arXiv:1712.05526, 2017. 2, 6
+[3] Edward Chou, Florian Tramer, and Giancarlo Pellegrino. Sentinet: Detecting localized universal attacks against deep learning systems. In 2020 IEEE Security and Privacy Workshops (SPW), pages 48–54. IEEE, 2020. 1
+[4] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional transformers for language understanding. arXiv preprint arXiv:1810.04805, 2018. 1
+[5] Yansong Gao, Change Xu, Derui Wang, Shiping Chen, Damith C Ranasinghe, and Surya Nepal. Strip: A defence against trojan attacks on deep neural networks. In Proceedings of the 35th Annual Computer Security Applications Conference, pages 113–125, 2019. 1, 2
+[6] Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial examples. arXiv preprint arXiv:1412.6572, 2014. 2, 3
+[7] Tianyu Gu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Identifying vulnerabilities in the machine learning model supply chain. arXiv preprint arXiv:1708.06733, 2017. 1, 2, 6
+[8] Junfeng Guo, Ang Li, and Cong Liu. Aeva: Black-box backdoor detection using adversarial extreme value analysis. arXiv preprint arXiv:2110.14880, 2021. 2, 6
+[9] Wenbo Guo, Lun Wang, Yan Xu, Xinyu Xing, Min Du, and Dawn Song. Towards inspecting and eliminating trojan backdoors in deep neural networks. In 2020 IEEE International Conference on Data Mining (ICDM), pages 162–171. IEEE, 2020. 1, 2
+[10] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 770–778, 2016. 1, 6
+[11] Gao Huang, Zhuang Liu, Laurens Van Der Maaten, and Kilian Q Weinberger. Densely connected convolutional networks. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 4700–4708, 2017. 6
+[12] Soheil Kolouri, Aniruddha Saha, Hamed Pirsiavash, and Heiko Hoffmann. Universal litmus patterns: Revealing backdoor attacks in cnns. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 301–310, 2020. 2, 6
+[13] Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009. 6
+[14] Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classiﬁcation with deep convolutional neural networks. Advances in neural information processing systems, 25, 2012. 1
+
+[15] Alexey Kurakin, Ian J Goodfellow, and Samy Bengio. Adversarial examples in the physical world. In Artiﬁcial intelligence safety and security, pages 99–112. Chapman and Hall/CRC, 2018. 3
+[16] Ya Le and Xuan Yang. Tiny imagenet visual recognition challenge. CS 231N, 7(7):3, 2015. 6
+[17] Aishan Liu, Tairan Huang, Xianglong Liu, Yitao Xu, Yuqing Ma, Xinyun Chen, Stephen J Maybank, and Dacheng Tao. Spatiotemporal attacks for embodied agents. In European Conference on Computer Vision, pages 122–138. Springer, 2020. 3
+[18] Aishan Liu, Xianglong Liu, Jiaxin Fan, Yuqing Ma, Anlan Zhang, Huiyuan Xie, and Dacheng Tao. Perceptual-sensitive gan for generating adversarial patches. In Proceedings of the AAAI conference on artiﬁcial intelligence, volume 33, pages 1028–1035, 2019. 3
+[19] Yingqi Liu, Shiqing Ma, Yousra Aafer, Wen-Chuan Lee, Juan Zhai, Weihang Wang, and Xiangyu Zhang. Trojaning attack on neural networks. 2017. 2
+[20] Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks. arXiv preprint arXiv:1706.06083, 2017. 6
+[21] Bingxu Mu, Le Wang, and Zhenxing Niu. Adversarial ﬁnetuning for backdoor defense: Connect adversarial examples to triggered samples. arXiv preprint arXiv:2202.06312, 2022. 3
+[22] Anh Nguyen and Anh Tran. Wanet–imperceptible warpingbased backdoor attack. arXiv preprint arXiv:2102.10369, 2021. 2, 6
+[23] Tuan Anh Nguyen and Anh Tran. Input-aware dynamic backdoor attack. Advances in Neural Information Processing Systems, 33:3454–3464, 2020. 2, 6
+[24] Ximing Qiao, Yukun Yang, and Hai Li. Defending neural backdoors via generative distribution modeling. Advances in neural information processing systems, 32, 2019. 2
+[25] Aniruddha Saha, Akshayvarun Subramanya, and Hamed Pirsiavash. Hidden trigger backdoor attacks. In Proceedings of the AAAI conference on artiﬁcial intelligence, volume 34, pages 11957–11965, 2020. 2
+[26] Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, and Liang-Chieh Chen. Mobilenetv2: Inverted residuals and linear bottlenecks. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 4510–4520, 2018. 6
+[27] Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh, and Dhruv Batra. Grad-cam: Visual explanations from deep networks via gradient-based localization. In Proceedings of the IEEE international conference on computer vision, pages 618–626, 2017. 4
+[28] Karen Simonyan and Andrew Zisserman. Very deep convolutional networks for large-scale image recognition. arXiv preprint arXiv:1409.1556, 2014. 6
+[29] Johannes Stallkamp, Marc Schlipsing, Jan Salmen, and Christian Igel. Man vs. computer: Benchmarking machine learning algorithms for trafﬁc sign recognition. Neural networks, 32:323–332, 2012. 6
+
+9
+
+[30] Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Goodfellow, and Rob Fergus. Intriguing properties of neural networks. arXiv preprint arXiv:1312.6199, 2013. 2
+[31] Brandon Tran, Jerry Li, and Aleksander Madry. Spectral signatures in backdoor attacks. Advances in neural information processing systems, 31, 2018. 1, 2
+[32] Alexander Turner, Dimitris Tsipras, and Aleksander Madry. Label-consistent backdoor attacks. arXiv preprint arXiv:1912.02771, 2019. 2
+[33] Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y Zhao. Neural cleanse: Identifying and mitigating backdoor attacks in neural networks. In 2019 IEEE Symposium on Security and Privacy (SP), pages 707–723. IEEE, 2019. 1, 2, 6, 8
+[34] Hang Wang, Zhen Xiang, David J Miller, and George Kesidis. Universal post-training backdoor detection. arXiv preprint arXiv:2205.06900, 2022. 2
+[35] Ren Wang, Gaoyuan Zhang, Sijia Liu, Pin-Yu Chen, Jinjun Xiong, and Meng Wang. Practical detection of trojan neural networks: Data-limited and data-free cases. In European Conference on Computer Vision, pages 222–238. Springer, 2020. 1, 2, 6
+[36] Xiaojun Xu, Qi Wang, Huichen Li, Nikita Borisov, Carl A Gunter, and Bo Li. Detecting ai trojans using meta neural analysis. In 2021 IEEE Symposium on Security and Privacy (SP), pages 103–120. IEEE, 2021. 2
+[37] Shihao Zhao, Xingjun Ma, Xiang Zheng, James Bailey, Jingjing Chen, and Yu-Gang Jiang. Clean-label backdoor attacks on video recognition models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 14443–14452, 2020. 2
+[38] Liuwan Zhu, Rui Ning, Cong Wang, Chunsheng Xin, and Hongyi Wu. Gangsweep: Sweep out neural backdoors by gan. In Proceedings of the 28th ACM International Conference on Multimedia, pages 3173–3181, 2020. 2
+10
+

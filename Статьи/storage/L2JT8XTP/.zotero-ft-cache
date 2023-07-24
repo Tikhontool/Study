@@ -1,0 +1,89 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:2110.11571
+
+Help | Advanced Search
+Search
+Computer Science > Machine Learning
+(cs)
+[Submitted on 22 Oct 2021 ( v1 ), last revised 1 Dec 2021 (this version, v3)]
+Title: Anti-Backdoor Learning: Training Clean Models on Poisoned Data
+Authors: Yige Li , Xixiang Lyu , Nodens Koren , Lingjuan Lyu , Bo Li , Xingjun Ma
+Download a PDF of the paper titled Anti-Backdoor Learning: Training Clean Models on Poisoned Data, by Yige Li and 5 other authors
+Download PDF
+
+    Abstract: Backdoor attack has emerged as a major security threat to deep neural networks (DNNs). While existing defense methods have demonstrated promising results on detecting or erasing backdoors, it is still not clear whether robust training methods can be devised to prevent the backdoor triggers being injected into the trained model in the first place. In this paper, we introduce the concept of \emph{anti-backdoor learning}, aiming to train \emph{clean} models given backdoor-poisoned data. We frame the overall learning process as a dual-task of learning the \emph{clean} and the \emph{backdoor} portions of data. From this view, we identify two inherent characteristics of backdoor attacks as their weaknesses: 1) the models learn backdoored data much faster than learning with clean data, and the stronger the attack the faster the model converges on backdoored data; 2) the backdoor task is tied to a specific class (the backdoor target class). Based on these two weaknesses, we propose a general learning scheme, Anti-Backdoor Learning (ABL), to automatically prevent backdoor attacks during training. ABL introduces a two-stage \emph{gradient ascent} mechanism for standard training to 1) help isolate backdoor examples at an early training stage, and 2) break the correlation between backdoor examples and the target class at a later training stage. Through extensive experiments on multiple benchmark datasets against 10 state-of-the-art attacks, we empirically show that ABL-trained models on backdoor-poisoned data achieve the same performance as they were trained on purely clean data. Code is available at \url{ this https URL }. 
+
+Comments: 	Accepted to NeurIPS 2021
+Subjects: 	Machine Learning (cs.LG) ; Artificial Intelligence (cs.AI)
+Cite as: 	arXiv:2110.11571 [cs.LG]
+  	(or arXiv:2110.11571v3 [cs.LG] for this version)
+  	https://doi.org/10.48550/arXiv.2110.11571
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Yige Li [ view email ]
+[v1] Fri, 22 Oct 2021 03:30:48 UTC (35,221 KB)
+[v2] Mon, 25 Oct 2021 03:41:22 UTC (38,403 KB)
+[v3] Wed, 1 Dec 2021 10:47:34 UTC (38,640 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Anti-Backdoor Learning: Training Clean Models on Poisoned Data, by Yige Li and 5 other authors
+    PDF
+    Other formats 
+
+( license )
+Current browse context:
+cs.LG
+< prev   |   next >
+new | recent | 2110
+Change to browse by:
+cs
+cs.AI
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+DBLP - CS Bibliography
+listing | bibtex
+Lingjuan Lyu
+Bo Li
+Xingjun Ma
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

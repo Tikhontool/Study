@@ -1,0 +1,90 @@
+
+Skip to main content
+Cornell University
+We are hiring
+
+We gratefully acknowledge support from the Simons Foundation, member institutions , and all contributors. Donate
+arxiv logo > cs > arXiv:1912.01206
+
+Help | Advanced Search
+Search
+Computer Science > Machine Learning
+(cs)
+[Submitted on 3 Dec 2019]
+Title: Deep Probabilistic Models to Detect Data Poisoning Attacks
+Authors: Mahesh Subedar , Nilesh Ahuja , Ranganath Krishnan , Ibrahima J. Ndiour , Omesh Tickoo
+Download a PDF of the paper titled Deep Probabilistic Models to Detect Data Poisoning Attacks, by Mahesh Subedar and 4 other authors
+Download PDF
+
+    Abstract: Data poisoning attacks compromise the integrity of machine-learning models by introducing malicious training samples to influence the results during test time. In this work, we investigate backdoor data poisoning attack on deep neural networks (DNNs) by inserting a backdoor pattern in the training images. The resulting attack will misclassify poisoned test samples while maintaining high accuracies for the clean test-set. We present two approaches for detection of such poisoned samples by quantifying the uncertainty estimates associated with the trained models. In the first approach, we model the outputs of the various layers (deep features) with parametric probability distributions learnt from the clean held-out dataset. At inference, the likelihoods of deep features w.r.t these distributions are calculated to derive uncertainty estimates. In the second approach, we use Bayesian deep neural networks trained with mean-field variational inference to estimate model uncertainty associated with the predictions. The uncertainty estimates from these methods are used to discriminate clean from the poisoned samples. 
+
+Comments: 	To appear in Bayesian Deep Learning Workshop at NeurIPS 2019
+Subjects: 	Machine Learning (cs.LG) ; Machine Learning (stat.ML)
+Cite as: 	arXiv:1912.01206 [cs.LG]
+  	(or arXiv:1912.01206v1 [cs.LG] for this version)
+  	https://doi.org/10.48550/arXiv.1912.01206
+Focus to learn more
+arXiv-issued DOI via DataCite
+Submission history
+From: Nilesh Ahuja [ view email ]
+[v1] Tue, 3 Dec 2019 05:58:51 UTC (19 KB)
+Full-text links:
+Download:
+
+    Download a PDF of the paper titled Deep Probabilistic Models to Detect Data Poisoning Attacks, by Mahesh Subedar and 4 other authors
+    PDF
+    PostScript
+    Other formats 
+
+( license )
+Current browse context:
+cs.LG
+< prev   |   next >
+new | recent | 1912
+Change to browse by:
+cs
+stat
+stat.ML
+References & Citations
+
+    NASA ADS
+    Google Scholar
+    Semantic Scholar
+
+DBLP - CS Bibliography
+listing | bibtex
+Mahesh Subedar
+Nilesh A. Ahuja
+Ranganath Krishnan
+Omesh Tickoo
+a export BibTeX citation Loading...
+Bookmark
+BibSonomy logo Reddit logo
+Bibliographic Tools
+Bibliographic and Citation Tools
+Bibliographic Explorer Toggle
+Bibliographic Explorer ( What is the Explorer? )
+Litmaps Toggle
+Litmaps ( What is Litmaps? )
+scite.ai Toggle
+scite Smart Citations ( What are Smart Citations? )
+Code, Data, Media
+Demos
+Related Papers
+About arXivLabs
+Which authors of this paper are endorsers? | Disable MathJax ( What is MathJax? )
+
+    About
+    Help
+
+    contact arXiv Click here to contact arXiv Contact
+    subscribe to arXiv mailings Click here to subscribe Subscribe
+
+    Copyright
+    Privacy Policy
+
+    Web Accessibility Assistance
+
+    arXiv Operational Status
+    Get status notifications via email or slack
+

@@ -1,0 +1,930 @@
+Backdoor Defense via Deconfounded Representation Learning
+Zaixi Zhang1,2, Qi Liu1,2*, Zhicai Wang4, Zepu Lu4, Qingyong Hu3 1: Anhui Province Key Lab of Big Data Analysis and Application, School of Computer Science and Technology, University of Science and Technology of China 2:State Key Laboratory of Cognitive Intelligence, Hefei, Anhui, China 3:Hong Kong University of Science and Technology 4: University of Science and Technology of China
+zaixi@mail.ustc.edu.cn, qiliuql@ustc.edu.cn {wangzhic, zplu}@mail.ustc.edu.cn, qhuag@cse.ust.hk
+
+arXiv:2303.06818v1 [cs.AI] 13 Mar 2023
+
+Abstract
+Deep neural networks (DNNs) are recently shown to be vulnerable to backdoor attacks, where attackers embed hidden backdoors in the DNN model by injecting a few poisoned examples into the training dataset. While extensive efforts have been made to detect and remove backdoors from backdoored DNNs, it is still not clear whether a backdoor-free clean model can be directly obtained from poisoned datasets. In this paper, we first construct a causal graph to model the generation process of poisoned data and find that the backdoor attack acts as the confounder, which brings spurious associations between the input images and target labels, making the model predictions less reliable. Inspired by the causal understanding, we propose the Causality-inspired Backdoor Defense (CBD), to learn deconfounded representations for reliable classification. Specifically, a backdoored model is intentionally trained to capture the confounding effects. The other clean model dedicates to capturing the desired causal effects by minimizing the mutual information with the confounding representations from the backdoored model and employing a sample-wise re-weighting scheme. Extensive experiments on multiple benchmark datasets against 6 state-ofthe-art attacks verify that our proposed defense method is effective in reducing backdoor threats while maintaining high accuracy in predicting benign samples. Further analysis shows that CBD can also resist potential adaptive attacks. The code is available at https://github.com/ zaixizhang/CBD.
+1. Introduction
+Recent studies have revealed that deep neural networks (DNNs) are vulnerable to backdoor attacks [18, 38, 53],
+*Qi Liu is the corresponding author.
+
+Trigger Pattern
+
+B
+
+DNN Classifier
+
+Dog Turtle Cat
+
+Image
+
+Predicted Label
+
+(a) Illustration of Backdoor Attack
+
+X
+
+Y
+
+(b) Causal Graph
+
+Figure 1. (a) A real example of the backdoor attack. The backdoored DNN classifies the “turtle” image with a trigger pattern as the target label “dog”. (b) The causal graph represents the causalities among variables: X as the input image, Y as the label, and B as the backdoor attack. Besides the causal effect of X on Y (X → Y ), the backdoor attack can attach trigger patterns to images (B → X), and change the labels to the targeted label (B → Y ). Therefore, as a confounder, the backdoor attack B opens a spurious path between X and Y (X ← B → Y ).
+
+where attackers inject stealthy backdoors into DNNs by poisoning a few training data. Specifically, backdoor attackers attach the backdoor trigger (i.e., a particular pattern) to some benign training data and change their labels to the attacker-designated target label. The correlations between the trigger pattern and target label will be learned by DNNs during training. In the inference process, the backdoored model behaves normally on benign data while its prediction will be maliciously altered when the backdoor is activated. The risk of backdoor attacks hinders the applications of DNNs to some safety-critical areas such as automatic driving [38] and healthcare systems [14].
+On the contrary, human cognitive systems are known to be immune to input perturbations such as stealthy trigger patterns induced by backdoor attacks [17]. This is because humans are more sensitive to causal relations than the statistical associations of nuisance factors [29,60]. In contrast, deep learning models that are trained to fit the poisoned
+
+1
+
+datasets can hardly distinguish the causal relations and the statistical associations brought by backdoor attacks. Based on causal reasoning, we can identify causal relation [50,52] and build robust deep learning models [70, 71]. Therefore, it is essential to leverage causal reasoning to analyze and mitigate the threats of backdoor attacks.
+In this paper, we focus on the image classification tasks and aim to train backdoor-free models on poisoned datasets without extra clean data. We first construct a causal graph to model the generation process of backdoor data where nuisance factors (i.e., backdoor trigger patterns) are considered. With the assistance of the causal graph, we find that the backdoor attack acts as the confounder and opens a spurious path between the input image and the predicted label (Figure 1). If DNNs have learned the correlation of such a spurious path, their predictions will be changed to the target labels when the trigger is attached.
+Motivated by our causal insight, we propose Causalityinspired Backdoor Defense (CBD) to learn deconfounded representations for classification. As the backdoor attack is stealthy and hardly measurable, we cannot directly block the backdoor path by the backdoor adjustment from causal inference [52]. Inspired by recent advances in disentangled representation learning [20, 36, 66], we instead aim to learn deconfounded representations that only preserve the causality-related information. Specifically in CBD, two DNNs are trained, which focus on the spurious correlations and the causal effects respectively. The first DNN is designed to intentionally capture the backdoor correlations with an early stop strategy. The other clean model is then trained to be independent of the first model in the hidden space by minimizing mutual information. The information bottleneck strategy and sample-wise re-weighting scheme are also employed to help the clean model capture the causal effects while relinquishing the confounding factors. After training, only the clean model is used for downstream classification tasks. In summary, our contributions are:
+• From a causal perspective, we find the backdoor attack acts as the confounder that causes spurious correlations between the input images and the target label.
+• With the causal insight, we propose a Causalityinspired Backdoor Defense (CBD), which learns deconfounded representations to mitigate the threat of poisoning-based backdoor attacks.
+• Extensive experiments with 6 representative backdoor attacks are conducted. The models trained using CBD are of almost the same clean accuracy as they were directly trained on clean data and the average backdoor attack success rates are reduced to around 1%, which verifies the effectiveness of CBD.
+• We explore one potential adaptive attack against CBD,
+
+which tries to make the backdoor attack stealthier by adversarial training. Experiments show that CBD is robust and resistant to such an adaptive attack.
+2. Related Work
+2.1. Backdoor Attacks
+Backdoor attacks are emerging security threats to deep neural network classifiers. In this paper, we focus on the poisoning-based backdoor attacks, where the attacker can only inject poisoned examples into the training set while cannot modify other training components (e.g., training loss). Note that backdoor attacks could occur in other tasks (e.g., visual object tracking [34], graph classification [73], federated learning [72], and multi-modal contrastive learning [6]). The attacker may also have extra capabilities such as modifying the training process [41]. However, these situations are out of the scope of this paper.
+Based on the property of target labels, existing backdoor attacks can be divided into two main categories: dirty-label attacks [10,18,39,73] and clean-label attacks [53,55,63,81, 82]. Dirty-label attack is the most common backdoor attack paradigm, where the poisoned samples are generated by stamping the backdoor trigger onto the original images and altering the labels to the target label. BadNets [18] firstly employed a black-white checkerboard as the trigger pattern. Furthermore, more complex and stealthier trigger patterns are proposed such as blending backgrounds [10], natural reflections [39], invisible noise [9, 30, 35] and sample-wise dynamic patterns [31, 47, 48]. On the other hand, Cleanlabel backdoor attacks are arguably stealthier as they do not change the labels. For example, Turner et al. [63] leveraged deep generative models to modify benign images from the target class.
+2.2. Backdoor Defenses
+Based on the target and the working stage, existing defenses can be divided into the following categories: (1) Detection based defenses aim to detect anomalies in input data [7, 12, 15, 21, 58, 62, 67] or whether a given model is backdoored [8, 27, 56, 65]. For instance, Du et al. [13] applies differential privacy to improve the utility of backdoor detection. (2) Model reconstruction based defenses aim to remove backdoors from a given poisoned model. For example, Mode Connectivity Repair (MCR) [80] mitigates the backdoors by selecting a robust model in the path of loss landscape, while Neural Attention Distillation (NAD) [33] leverages attention distillation to remove triggers. (3) Poison suppression based defenses [25, 32] reduce the effectiveness of poisoned examples at the training stage and try to learn a clean model from a poisoned dataset. For instance, Decoupling-based backdoor defense (DBD) [25] decouples the training of DNN backbone and fully-connected
+
+2
+
+layers to reduce the correlation between triggers and target labels. Anti-Backdoor Learning (ABL) [32] uses gradient ascent to unlearn the backdoored model with the isolated backdoor data.
+In this paper, our proposed CBD is most related to the Poison suppression based defenses. Our goal is to train clean models directly on poisoned datasets without access to clean datasets or further altering the trained model. Different with ABL [32], CBD directly trains clean models on poisoned datasets without further finetuning the trained model (unlearning backdoor). In contrast with DBD, CBD does not require additional self-supervised pretraining stages and is much more efficient. In Sec. 5, extensive experimental results clearly show the advantages of CBD.
+2.3. Causal Inference
+Causal inference has a long history in statistical research [50–52]. The objective of causal inference is to analyze the causal effects among variables and mitigate spurious correlations. Recently, causal inference has also shown promising results in various areas of machine learning [24,44,49,59,68,70,71]. However, to date, causal inference has not been incorporated into the analysis and defense of backdoor attacks.
+3. Preliminaries
+3.1. Problem Formulation
+In this section, we first formulate the problem of poison suppression based defense, then provide a causal view on backdoor attacks and introduce our proposed Causalityinspired Backdoor Defense. Here, we focus on image classification tasks with deep neural networks. Threat Model. We follow the attack settings in previous works [25, 32]. Specifically, we assume a set of backdoor examples has been pre-generated by the attacker and has been successfully injected into the training dataset. We also assume the defender has complete control over the training process but is ignorant of the distribution or the proportion of the backdoor examples in a given dataset. The defender’s goal is to train a backdoor-free model on the poisoned dataset, which is as good as models trained on purely clean data. Robust learning strategies developed under such a threat model could benefit research institutes, companies, or government agencies that have the computational resources to train their models but rely on outsourced training data.
+3.2. A Causal View on Backdoor Attacks
+Humans’ ability to perform causal reasoning is arguably one of the most important characteristics that distinguish human learning from deep learning [54, 70]. The superiority of causal reasoning endows humans with the abil-
+
+ity to recognize causal relationships while ignoring nonessential factors in tasks. On the contrary, DNNs usually fail to distinguish causal relations and statistical associations and tend to learn “easier” correlations than the desired knowledge [16, 46]. Such a shortcut solution could lead to overfitting to nuisance factors (e.g., trigger patterns), which would further result in the vulnerability to backdoor attacks. Therefore, here we leverage causal inference to analyze DNN model training and mitigate the risks of backdoor injection.
+We first construct a causal graph as causal graphs are the keys to formalize causal inference. One approach is to use causal structure learning to infer causal graphs [50], but it is challenging to apply this kind of approach to highdimensional data like images. Here, following previous works [49, 70, 71], we leverage domain knowledge (Figure 1 (a)) to construct a causal graph G (Figure 1 (b)) to model the generation process of poisoned data.
+In the causal graph, we denote the abstract data variables by the nodes (X as the input image, Y as the label, and B as the backdoor attack), and the directed links represent their relationships. As shown in Figure 1(b), besides the causal effect of X on Y (X → Y ), the backdoor attacker can attach trigger patterns to images (B → X) and change the labels to the targeted label (B → Y ). Therefore, as a confounder between X and Y , backdoor attack B opens the spurious path X ← B → Y (let B = 1 denotes the images are poisoned and B = 0 denotes the images are clean). By “spurious”, we mean that the path lies outside the direct causal path from X to Y , making X and Y spuriously correlated and yielding an erroneous effect when the trigger is activated. DNNs can hardly distinguish between the spurious correlations and causative relations [51]. Hence, directly training DNNs on potentially poisoned dataset incurs the risk of being backdoored.
+To pursue the causal effect of X on Y , previous works usually perform the backdoor adjustment in the causal intervention [51] with do-calculus: P (Y |do(X)) =
+B∈{0,1} P (Y |X, B)P (B). However, since the confounder variable B is hardly detectable and measurable in our setting, we can not simply use the backdoor adjustment to block the backdoor path. Instead, since the goal of most deep learning models is to learn accurate embedding representations for downstream tasks [1, 20, 26, 66], we aim to disentangle the confouding effects and causal effects in the hidden space. The following section illustrates our method.
+4. Causality-inspired Backdoor Defense
+Motivated by our causal insight, we propose the Causality-inspired Backdoor Defense (CBD). In practice, it may be difficult to directly identify the confounding and causal factors of X in the data space. We make an assumption that the confounding and causal factors will be reflected
+
+3
+
+fB
+
+R
+
+X
+
+Ladv
+
+or Adjustment
+
+fC
+
+Z
+
+Y
+
+l2 norm
+
+Lwce
+
+al Graph
+
+Figure 2. The(bm)oMdeol dfrealmFewraomrkeowf oCrBkDotfhaCtBinDcludes an adver-
+saral loss Ladv for mutual information minimization, a l2−norm regularization on z, and a weighted cross entropy loss Lwce to augment causal effects.
+
+in the hidden representations. Based on the assumption, we illustrate our main idea in Figure 2. Generally, two DNNs including fB and fC are trained, which focus on the spurious correlations and the causal relations respectively. We take the embedding vectors from the penultimate layers of fB and fC as R and Z. Note that R is introduced to avoid confusion with B. Without confusion, we use uppercase letters for variables and lowercase letters for concrete values in this paper. To generate high-quality variable Z that captures the causal relations, we get inspiration from disentangled representation learning [20, 66]. In the training phase, fB is firstly trained on the poisoned dataset to capture spurious correlations of backdoor. The other clean model fC is then trained to encourage independence in the hidden space i.e., Z ⊥ R with mutual information minimization and sample re-weighting. After training, only fC is used for downstream classification tasks. In the rest of this section, we provide details on each step of CBD. Training a backdoored model fB. Firstly, fB is trained on the poisoned dataset with cross entropy loss to capture the spurious correlations of backdoor. Since the poisoned data still contains causal relations, we intentionally strengthen the confounding bias in fB with an early stop strategy. Specifically, we train fB only for several epochs (e.g., 5 epochs) and freeze its parameters in the training of fC. This is because previous works indicate that backdoor associations are easier to learn than causal relations [32]. Experiments in Appendix B also verify that the losses on backdoor examples reach nearly 0 while fB has not converged on clean samples after 5 epochs. Training a clean model fC. Inspired by previous works [19, 26], we formulate the training objective of fC with information bottleneck and mutual information minimization:
+
+  \mathcal {L}_C={\rm min}\underbrace {\beta I(Z; X)}_{\circled {1}}- \underbrace {I(Z; Y)}_{\circled {2}}+\underbrace {I(Z; R)}_{\circled {3}}, \vspace {-1em} \label {lc}  (1)
+
+where I(·; ·) denotes the mutual information. Term 1 and 2 constitute the information bottleneck loss [61] that encourages the variable Z to capture the core information for label prediction ( 2 ) while constraining unrelated informa-
+
+tion from inputs ( 1 ). β is a weight hyper-parameter. Term 3 is a de-confounder penalty term, which describes the dependency degree between the backdoored embedding R and the deconfounded embedding Z. It encourages Z to be independent of R by minimizing mutual information so as to focus on causal effects. However, LC in Equation 1 is not directly tractable, especially for the de-confounder penalty term. In practice, we relax Equation 1 and optimize the upper bound of the term 1 & 2 and the estimation of the term 3 . The details are shown below. Term 1 . Based on the definition of mutual information and basics of probability, I(Z; X) can be calculated as:
+  \begin {aligned} I(Z; X)&=\sum _x \sum _z p(z,x) {\rm log} \frac {p(z,x)}{p(z)p(x)} \  &=\sum _x \sum _z p(z|x)p(x) {\rm log} \frac {p(z|x)p(x)}{p(z)p(x)}\  &=\sum _x \sum _z p(z|x)p(x){\rm log}~ p(z|x)-\sum _z p(z){\rm log}~p(z). \label {I(z;x)} \end {aligned} 
+(2) However, the marginal probability p(z) = x p(z|x)p(x) is usually difficult to calculate in practice. We use variational approximation to address this issue, i.e., we use a variational distribution q(z) to approximate p(z). According to Gibbs’ inequality [42], we know that the KL divergence is non-negative: DKL(p(z)||q(z)) ≥ 0 ⇒ − z p(z)log p(z) ≤ − z p(z)log q(z). By substitute such inequality into Equation 2, we can derive an upper bound of I(Z; X):
+ \begin {aligned} I(Z; X)&\le \sum _x p(x)\sum _z p(z|x){\rm log}~ p(z|x)-\sum _z p(z){\rm log}~q(z)\ &=\sum _x p(x)\sum _z p(z|x) {\rm log} \frac {p(z|x)}{q(z)}\ &=\sum _x p(x)D_{\rm KL}(p(z|x)|q(z). \label {uper bound} \end {aligned} 
+(3) Following previous work [1], we assume that the posterior p(z|x) = N (µ(x), diag{σ2(x)}) is a gaussian distribution, where µ(x) is the encoded embedding of variable x and diag{σ2(x)} = {σd2}Dd=1 is the diagonal matrix indicating the variance. On the other hand, the prior q(z) is assumed to be a standard Gaussian distribution, i.e., q(z) = N (0, I). Finally, we can rewrite the above upper bound as:
+  D_{\rm KL}(p(z|x)||q(z))=\frac {1}{2}||\mu (x)||_2^2+\frac {1}{2}\sum _d(\sigma _d^2- {\rm log}\sigma _d^2 -1). \label {kl gaussian} 
+(4) The detailed derivation is shown in Appendix C. For ease of optimization, we fix σ(x) to be an all-zero matrix. Then z = µ(x) becomes a deterministic embedding. The optimization of this upper bound is equivalent to directly applying the l2norm regularization on the embedding vector z.
+
+4
+
+Term 2 . With the definition of mutual information, we have I(Z; Y ) = H(Y ) − H(Y |Z), where H(·) and H(·|·) denote the entropy and conditional entropy respectively. Since H(Y ) is a positive constant and can be ignored, we have the following inequality,
+
+  -I(Z;Y)\le H(Y|Z). 
+
+(5)
+
+In experiments, H(Y |Z) can be calculated and optimized as the cross entropy loss (CE). To further encourage the independence between fC and fB, we fix the parameters of fB and train fC with the samples-wise weighted cross entropy loss (Lwce). The weight is calculated as:
+
+  w(x) = \frac {CE(f_B(x), y)}{CE(f_B(x),y)+CE(f_C(x),y)}.  (6)
+
+For samples with large losses on fB, w(x) are close to 1; while w(x) are close to 0 when the losses are very small. The intuition of the re-weighting scheme is to let fC focus on “hard” examples for fB to encourage independence. Term 3 . Based on the relationship between mutual information and Kullback-Leibler (KL) divergence [4], the term I(Z; R) is equivalent to the KL divergence between the joint distribution p(Z, R) and the product of two marginals p(Z)p(X) as: I(Z; R) = DKL(p(Z, R)||p(Z)p(R)). Therefore, to minimize the de-confounder penalty term I(Z; R), we propose to use an adversarial process that minimizes the distance between the joint distribution p(Z, R) and the marginals p(Z)p(R). During the adversarial process, a discriminator Dϕ is trained to classify the sampled representations drawn from the joint p(Z, R) as the real, i.e., 1 and samples drawn from the marginals p(Z)p(R) as the fake, i.e., 0. The samples from the marginal distribution p(Z)p(R) are obtained by shuffling the individual representations of samples (z, r) in a training batch from p(Z, R). On the other hand, the clean model fC tries to generate z that look like drawn from p(Z)p(R) when combined with r from fB. Specifically, we optimize such adversarial objective similar to WGAN [2] with spectral normalization [45] since it is more stable in the learning process:
+
+  \mathcal {L}_{adv} =\mathop {\rm min}\limits _{\theta _C} \mathop { \rm max}\limits _{\phi } \mathbb {E}_{p(z,r)}[D_\phi (z,r)] - \mathbb {E}_{p(z)p(r)}[D_\phi (z,r)], 
+
+(7) where θC and ϕ denote the parameters of fC and Dϕ respectively. To sum up, the training objective for fC is:
+
+  \mathcal {L}_C = \mathcal {L}_{wce}+\mathcal {L}_{adv}+\beta ||\mu (x)||_2^2. \label {loss function} 
+
+(8)
+
+The overall objective can then be minimized using SGD. fB and fC are trained for T1 and T2 epochs respectively. The pseudo algorithm of CBD is shown in Algorithm 1. Further Discussions. Admittedly, it is challenging to disentangle causal factors and confounding factors thoroughly. This is because fB may still capture some causal relations.
+
+Algorithm 1 Causality-inspried Backdoor Defense (CBD) Input: β, number of training iterations T1, T2 Output: Clean model fC ;
+1: Initialize fC , fB, and Dϕ 2: for t = 1, · · · , T1 do 3: Train fB on the poisoned dataset with SGD 4: end for 5: for t = 1, · · · , T2 do 6: Train discriminator Dϕ 7: Calculate sample weight w(x) 8: Train fC with loss function in Equation 8 9: end for
+Moreover, encouraging independence between Z and R may result in loss of predictive information for fC. However, with the well-designed optimization objectives and training scheme, CBD manages to reduce the confounding effects as much as possible while preserving causal relations. The following section shows the detailed verification.
+5. Experiments
+5.1. Experimental Settings
+Datasets and DNNs. We evaluate all defenses on three classical benchmark datasets, CIFAR-10 [28], GTSRB [57] and an ImageNet subset [11]. As for model architectures, we adopt WideResNet (WRN-16-1) [69] for CIFAR-10 and GTSRB and ResNet-34 [22] for ImageNet subset. Note that our CBD is agnostic to the model architectures. Results with more models are shown in Appendix B. Attack Baselines. We consider 6 representative backdoor attacks. Specifically, we select BadNets [18], Trojan attack [38], Blend attack [10], Sinusoidal signal attack (SIG) [3], Dynamic attack [47], and WaNet [48]. BadNets, Trojan attack are patch-based visible dirty-label attacks; Blend is an invisible dirty-label attack; SIG belongs to clean-label attacks; Dynamic and WaNet are dynamic dirty-label attacks. More types of backdoor attacks are explored in Appendix B. The results when there is no attack and the dataset is completely clean is shown for reference. Defense Baselines. We compare our CBD with 5 stateof-the-art defense methods: Fine-pruning (FP) [37], Mode Connectivity Repair (MCR) [80], Neural Attention Distillation (NAD) [33], Anti-Backdoor Learning (ABL) [32], and Decoupling-based backdoor defense (DBD) [25]. We also provide results of DNNs trained without any defense methods i.e., No Defense. Attack Setups. We trained DNNs on poisoned datasets for 100 epochs using Stochastic Gradient Descent (SGD) with an initial learning rate of 0.1 on CIFAR-10 and the ImageNet subset (0.01 on GTSRB), a weight decay of 0.0001, and a momentum of 0.9. The target labels of backdoor at-
+
+5
+
+Table 1. The attack success rate (ASR %) and the clean accuracy (CA %) of 5 backdoor defense methods against 6 representative backdoor attacks. None means the training data is completely clean. The best results are bolded.
+
+Dataset Types No Defense FP
+
+MCR
+
+NAD
+
+ABL
+
+DBD CBD (Ours)
+
+ASR CA ASR CA ASR CA ASR CA ASR CA ASR CA ASR CA
+
+None 0 89.14 0 85.17 0 87.55 0 88.21 0 88.49 0 88.63 0 88.95
+
+BadNets 100 85.37 99.96 82.41 4.52 79.66 3.07 82.25 3.13 86.30 1.76 86.94 1.06 87.46
+
+Trojan 100 84.54 68.95 81.03 19.47 77.12 19.96 80.05 3.88 87.29 3.79 87.29 1.24 87.52
+
+Blend 100 84.56 87.14 81.57 36.15 78.24 10.65 83.71 14.60 85.02 5.12 86.83 1.96 87.48 CIFAR-10
+SIG 99.32 84.14 73.87 81.04 2.34 77.93 1.79 83.54 0.36 88.10 0.44 87.52 0.25 87.29
+
+Dynamic 100 85.48 89.22 80.63 25.26 75.03 25.60 74.94 17.26 85.29 10.21 85.42 0.86 85.67
+
+WaNet 98.55 86.77 73.12 81.58 28.59 77.12 24.15 79.50 22.24 75.74 5.86 84.60 4.24 86.55
+
+Average 99.65 85.14 82.03 81.38 19.39 77.52 14.20 80.67 10.25 84.62 4.53 86.43 1.60 87.00
+
+GTSRB
+
+None 0 97.74 0 90.18 0 95.27 0 95.29 0 96.47 0 96.45 0 BadNets 100 96.58 99.48 88.57 1.27 93.30 0.31 89.90 0.05 96.01 0.24 96.05 0.16 Trojan 99.95 96.49 97.40 88.51 4.62 92.99 0.56 90.32 0.47 94.91 0.56 94.69 0.12
+Blend 100 95.57 98.78 87.50 6.85 93.11 13.06 89.20 22.97 93.25 6.36 93.72 0.90 SIG 98.24 96.55 85.04 89.97 26.80 91.14 5.35 89.27 5.09 96.28 4.70 94.58 5.41 Dynamic 100 96.87 98.33 88.09 59.54 90.51 62.35 84.30 6.32 95.76 5.16 95.86 0.96 WaNet 99.92 95.94 97.93 90.13 55.25 91.24 34.16 83.09 5.56 93.83 3.47 94.71 3.13 Average 99.69 96.33 96.16 88.80 25.72 92.05 19.30 87.68 7.96 95.01 3.42 94.94 1.82
+
+96.54 96.21 95.29 94.16 94.37 96.02 95.64 95.17
+
+None 0 88.95 0 83.05 0 85.61 0 87.34 0 88.12 0 88.30 0 88.57 BadNets 100 85.24 98.03 82.76 25.14 77.90 7.38 82.11 1.02 87.47 1.27 87.61 0.66 88.12 ImageNet Trojan 100 85.65 97.29 81.46 6.65 77.06 13.80 81.49 1.68 88.21 1.48 88.20 0.72 88.24 Subset Blend 99.89 86.10 99.10 81.37 18.37 76.21 25.05 82.54 20.80 85.23 4.73 86.25 1.82 87.95
+SIG 98.53 86.06 77.39 82.55 24.62 78.97 5.30 83.24 0.22 86.65 1.95 87.09 0.45 87.27 Average 99.61 85.74 92.95 82.04 18.70 77.54 12.88 82.35 5.93 86.89 2.36 87.29 0.91 87.90
+
+Table 2. Robustness test with the poisoning rate from 1% to 50% for 4 attacks including BadNets, Trojan, Blend, and WaNet on CIFAR10 dataset. We show ASR (%) and CA (%).
+
+Poisoning
+
+BadNets Trojan Blend WaNet
+
+Defense
+
+Rate
+
+ASR CA ASR CA ASR CA ASR CA
+
+None 100 85.67 100 85.15 100 85.22 97.56 86.55 1%
+CBD 0.62 88.83 1.13 88.56 0.67 87.52 1.06 86.59
+
+None 100 84.68 100 84.82 100 85.06 99.83 86.27 5%
+CBD 0.93 87.50 1.10 88.45 0.73 87.47 1.07 86.56
+
+None 100 83.42 100 79.32 100 82.08 100 74.41 20%
+CBD 1.16 84.35 1.57 81.71 5.17 86.53 5.72 74.25
+
+None 100 79.45 100 72.83 100 69.67 100 67.25 50%
+CBD 1.47 78.88 2.31 75.34 8.14 85.56 8.75 70.43
+
+tacks are set to 0 for CIFAR-10 and ImageNet, and 1 for GTSRB. The default poisoning rate is set to 10%. Defense Setups. For FP, MCR, NAD, ABL, and DBD, we follow the settings specified in their original papers, including the available clean data. Three data augmentation techniques suggested in [32] including random crop, horizontal flipping, and cutout, are applied for all defense methods. The hyper-parameter T1 and β are searched in {3, 5, 8} and {1e−5, 1e−4, 1e−3} respectively. Following the suggestion of the previous work [80], we choose hyperparameters with
+
+5-fold cross-validation on the training set according to the average classification accuracy on hold-out sets. T2 is set to 100 in the default setting. All experiments were run one NVIDIA Tesla V100 GPU. More details of settings are shown in Appendix A. Metrics. We adopt two commonly used performance metrics for the evaluation all methods: attack success rate (ASR) and clean accuracy (CA). Let Dtest denotes the benign testing set and f indicates the trained classifier, we have ASR ≜ Pr(x,y)∈Dtest {f (B(x)) = yt|y ̸= yt} and
+
+6
+
+CA ≜ Pr(x,y)∈Dtest {f (x) = y}, where yt is the target label and B(·) is the adversarial generator to add triggers into images. Overall, the lower the ASR and the higher the BA, the better the defense.
+5.2. Effectiveness of CBD
+Comparison to Existing Defenses. Table 1 demonstrates the proposed CBD method on CIFAR-10, GTSRB, and ImageNet Subset. We consider 6 representative backdoor attacks and compare the performance of CBD with four other backdoor defense techniques. We omit some attacks on ImageNet dataset due to a failure of reproduction following their original papers. We can observe that CBD achieves the lowest average ASR across all three datasets. Specifically, the average ASRs are reduced to around 1% (1.60% for CIFAR-10, 1.82% for GTSRB, and 0.91% for ImageNet). On the other hand, the CAs of CBD are maintained and are close to training DNNs on clean datasets without attacks. We argue that baseline methods which try to fine-prune or unlearn backdoors of backdoored models are sub-optimal and less efficient. For example, the ABL tries to unlearn backdoor after model being backdoored; DBD requires additional a self-supervised pre-training stage, which introduces around 4 times overhead [25]. On the contrary, CBD directly trains a backdoor-free model, which achieves high clean accuracy while keeping efficiency.
+When comparing the performance of CBD against different backdoor attacks, we find WaNet achieves higher ASR than most attacks consistently (4.24% for CIFAR-10, 3.41% for GTSRB). This may be explained by the fact that WaNet as one of the state-of-the-art backdoor attacks adopts image warping as triggers that are stealthier than patch-based backdoor attacks [48]. Hence, the spurious correlations between backdoor triggers and the target label are more difficult to capture for fB. Then in the second step, fC struggles to distinguish the causal and confounding effects. We also notice that CBD is not the best when defending SIG on GTSRB and ImageNet Subset. We guess the reason is similar to WaNet discussed above. SIG produces poisoned samples by mingling trigger patterns with the background. Moreover, SIG belongs to clean-label attacks, which are stealthier than dirty-label attacks [3]. This is one limitation of our CBD to be improved in the future. Effectiveness with Different Poisoning Rate. In Table 2, we demonstrate that our CBD is robust and can achieve satisfactory defense performance with a poisoning rate ranging from 1% to 50%. Note that the results when poisoning rate equals 0% have been shown in Table 1 (None). Here, we did experiments on CIFAR-10 against 4 attacks including BadNets, Trojan, Blend, and WaNet. Generally, with a higher poisoning rate, CBD has lower CA and higher ASR. We can find that even with a poisoning rate of up to 50%, our CBD method can still reduce the ASR from
+
+Table 3. The average training time (seconds) on CIFAR10 and the ImageNet subset with no defense and CBD. The percentages in parentheses indicate the relative increase of training time.
+
+Dataset
+BadNets Trojan Blend WaNet
+
+CIFAR-10
+
+No Defense
+
+CBD
+
+1152
+
+1317(14.3%)
+
+1204
+
+1356(12.6%)
+
+1159
+
+1311(13.1%)
+
+1164
+
+1293(11.1%)
+
+ImageNet subset
+
+No Defense
+
+CBD
+
+2640
+
+2987(13.1%)
+
+2621
+
+2933(11.9%)
+
+2623
+
+3076(17.3%)
+
+2647
+
+3074(16.1%)
+
+100% to 1.47%, 2.31%, 8.14%, and 8.75% for BadNets, Trojan, Blend, and WaNet, respectively. Moreover, CBD helps backdoored DNNs recover clean accuracies. For instance, the CA of CBD for Blend and WaNet improves from 69.67% and 67.25% to 85.56% and 70.43% respectively at 50% poisoning rate. Visualization of the Hidden Space. In Figure 3, we show the t-SNE [64] visualizations of the embeddings to give more insights of our proposed method. We conduct the BadNets attack on CIFAR-10. First, in Figure 3 (a)&(b), we show the embeddings of r and z when CBD is just initialized and when the training of CBD is completed. We observe that there is a clear separation between the confounding component r and the causal component z after training. Moreover, in Figure 3 (c)&(d), we use t-SNE separately on r and z and mark samples with different labels with different colors. Interestingly, we find the embeddings of the poisoned samples form clusters in r, which indicates that the spurious correlation between backdoor trigger and the target label has been learned. In contrast, poisoned samples lie closely to samples with their ground-truth label in deconfounded embeddings z, which demonstrates CBD can effectively defend backdoor attacks. Computational Complexity. Compared with the vanilla SGD to train a DNN model, CBD only requires additionally training a backdoored model fB for a few epochs (e.g., 5 epochs) and a discriminator Dϕ, which introduces minimal extra overhead. Here, we report the training time cost of CBD on CIFAR-10 and the ImageNet subset in Table 3. We also report the time costs of training vanilla DNNs for reference. The extra computational cost is around 10% − 20% of the standard training time on CIFAR-10 and the ImageNet subset. This again shows the advantages of our method.
+5.3. Resistance to Potential Adaptive Attacks
+While not our initial intention, our work may be used to help develop more advanced backdoor attacks. Here, we tentatively discuss the potential adaptive attacks on CBD. Typically, backdoor attacks are designed to be injected successfully in a few epochs even only a small portion of data is poisoned (e.g., less than 1%). Hence, the confounding bias of backdoor can be well captured by fB and R. The intuition of our adaptive attack strategy is to slow the in-
+
+7
+
+
+
+rz 
+
+rz 
+
+ 
+
+
+ 
+
+
+
+ 
+
+
+
+
+
+
+
+ 
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+ 
+
+
+
+ SRLVRQ
+
+ SRLVRQ
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                       
+
+(a) Initialization
+
+(b) Training Completed
+
+(c) r
+
+(d) z
+
+Figure 3. Visualization of the hidden space with t-SNE
+
+jection process of backdoor attacks (i.e., increasing the corresponding training losses) by adding optimized noise into the poisoned examples, similar to recent works on adversarial training [43] and unlearnable examples [23]. If the confounding effects is not captured in the first step, then our CBD becomes ineffective. Assumptions on Attacker’s Capability. We assume that attackers have the entire benign dataset. The attackers may have the knowledge of the DNN architecture but cannot interfere with the training process. Moreover, the attackers cannot further modify their poisoned data once the poisoned examples are injected into the training dataset. Problem Formulation. We formulate the adaptive attack as a min-max optimization problem. Let D′ = {(xi, yi)}Ni=′1 indicates the poisoned images by backdoor attacks, D = {(xi, yi)}Ni=1 denotes the benign images, and δi is the added noise to be optimized. Given an DNN model fθ with parameters θ, the adaptive attack aims to optimize δi by maximizing the losses of poisoned examples while minimizing the average cross entropy losses of all the samples, i.e.,
+  \min _{\theta }\left [\sum _{x \in \mathcal {D}} \mathcal {L}(f_\theta (x),y)+\sum _{x \in \mathcal {D}'} \max _{\delta _i}\mathcal {L}(f_\theta (x+\delta _i),y)\right ], 
+(9) where the noise δi is bounded by ∥δi∥p ≤ ϵ with ∥ · ∥p denoting the Lp norm, and ϵ is set to be small such that the poisoned samples cannot be filtered by visual inspection. After optimization, the poisoned examples attached with the optimized noises δi are injected to the training dataset. We adopt the first-order optimization method PGD [43] to solve the constrained inner maximization problem:
+  x_{t+1} = \Pi _\epsilon (x_t + \alpha \cdot \nabla _x\mathcal {L}(f_{\theta }(x_t), y)),  (10)
+where t is the current perturbation step (M steps in total), ∇xL(fθ(xt), y) is the gradient of the loss with respect to the input, Πϵ is a projection function that clips the noise back to the ϵ-ball around the original example x when it goes beyond, and α is the step size. Pseudo codes of the adaptive attack are shown in Appendix B.
+
+Experimental Settings. We adopt the CIFAR-10 dataset and WRN-16-1 to conduct the experiments. According to previous studies in adversarial attacks, small L∞-bounded noise within ∥δ∥∞<8/255 on images are unnoticeable to human observers. Therefore, we consider the same constraint in our experiments. We use the SGD to solve the above optimization problem for 10 epochs with the step size α of 0.002 and M = 5 perturbation steps. Results. With BadNets, the adaptive attack works well when there is no defense (CA=84.55%, ASR=99.62%). However, this attack still fails to attack our CBD (CA=84.19%, ASR=4.31%). More detailed results are shown in Appendix B. We can conclude that our defense is resistant to this adaptive attack. The most probable reason is that the optimized noise becomes less effective when the model is retrained and the model parameters are randomly initialized. In another word, the optimized perturbations are not transferable.
+6. Conclusion
+Inspired by the causal perspective, we proposed Causality-inspired Backdoor Defense (CBD) to learn deconfounded representations for reliable classification. Extensive experiments against 6 state-of-the-art backdoor attacks show the effectiveness and robustness of CBD. Further analysis shows that CBD is robust against potential adaptive attacks. Future works include extending CBD to other domains such graph learning [74–77], federated learning [5], and self-supervised pertaining [78,79]. In summary, our work opens up an interesting research direction to leverage causal inference to analyze and mitigate backdoor attacks in machine learning.
+Acknowledgements
+This research was partially supported by a grant from the National Natural Science Foundation of China (Grant No. 61922073).
+
+8
+
+References
+[1] Alexander A Alemi, Ian Fischer, Joshua V Dillon, and Kevin Murphy. Deep variational information bottleneck. ICLR, 2017. 3, 4
+[2] Martin Arjovsky, Soumith Chintala, and Le´on Bottou. Wasserstein generative adversarial networks. In ICML, pages 214–223. PMLR, 2017. 5
+[3] Mauro Barni, Kassem Kallas, and Benedetta Tondi. A new backdoor attack in cnns by training set corruption without label poisoning. In ICIP, 2019. 5, 7
+[4] Mohamed Ishmael Belghazi, Aristide Baratin, Sai Rajeshwar, Sherjil Ozair, Yoshua Bengio, Aaron Courville, and Devon Hjelm. Mutual information neural estimation. In ICML, pages 531–540. PMLR, 2018. 5
+[5] Xiaoyu Cao, Zaixi Zhang, Jinyuan Jia, and Neil Zhenqiang Gong. Flcert: Provably secure federated learning against poisoning attacks. IEEE Transactions on Information Forensics and Security, 17:3691–3705, 2022. 8
+[6] Nicholas Carlini and Andreas Terzis. Poisoning and backdooring contrastive learning. ICLR, 2022. 2
+[7] Bryant Chen, Wilka Carvalho, Nathalie Baracaldo, Heiko Ludwig, Benjamin Edwards, Taesung Lee, Ian Molloy, and Biplav Srivastava. Detecting backdoor attacks on deep neural networks by activation clustering. In AAAI Workshop, 2019. 2
+[8] Huili Chen, Cheng Fu, Jishen Zhao, and Farinaz Koushanfar. Deepinspect: A black-box trojan detection and mitigation framework for deep neural networks. In IJCAI, 2019. 2
+[9] Jinyin Chen, Haibin Zheng, Mengmeng Su, Tianyu Du, Changting Lin, and Shouling Ji. Invisible poisoning: Highly stealthy targeted poisoning attack. In ICISC, 2019. 2
+[10] Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep learning systems using data poisoning. arXiv preprint arXiv:1712.05526, 2017. 2, 5
+[11] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In CVPR, 2009. 5
+[12] Bao Gia Doan, Ehsan Abbasnejad, and Damith C Ranasinghe. Februus: Input purification defense against trojan attacks on deep neural network systems. ACSAC, 2020. 2
+[13] Min Du, Ruoxi Jia, and Dawn Song. Robust anomaly detection and backdoor attack detection via differential privacy. ICLR, 2020. 2
+[14] Yu Feng, Benteng Ma, Jing Zhang, Shanshan Zhao, Yong Xia, and Dacheng Tao. Fiba: Frequency-injection based backdoor attack in medical image analysis. arXiv preprint arXiv:2112.01148, 2021. 1
+[15] Yansong Gao, Change Xu, Derui Wang, Shiping Chen, Damith C Ranasinghe, and Surya Nepal. Strip: A defence against trojan attacks on deep neural networks. In ACSAC, 2019. 2
+[16] Robert Geirhos, Jo¨rn-Henrik Jacobsen, Claudio Michaelis, Richard Zemel, Wieland Brendel, Matthias Bethge, and Felix A Wichmann. Shortcut learning in deep neural networks. Nature Machine Intelligence, 2020. 3
+
+[17] Alison Gopnik, Clark Glymour, David M Sobel, Laura E Schulz, Tamar Kushnir, and David Danks. A theory of causal learning in children: causal maps and bayes nets. Psychological review, 2004. 1
+[18] Tianyu Gu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Identifying vulnerabilities in the machine learning model supply chain. arXiv preprint arXiv:1708.06733, 2017. 1, 2, 5
+[19] Weikuo Guo, Huaibo Huang, Xiangwei Kong, and Ran He. Learning disentangled representation for cross-modal retrieval with deep mutual information estimation. In Proceedings of the 27th ACM International Conference on Multimedia, pages 1712–1720, 2019. 4
+[20] Ryuhei Hamaguchi, Ken Sakurada, and Ryosuke Nakamura. Rare event detection using disentangled representation learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 9327–9335, 2019. 2, 3, 4
+[21] Jonathan Hayase, Weihao Kong, Raghav Somani, and Sewoong Oh. Spectre: Defending against backdoor attacks using robust statistics. In ICML, 2021. 2
+[22] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In CVPR, 2016. 5
+[23] Hanxun Huang, Xingjun Ma, Sarah Monazam Erfani, James Bailey, and Yisen Wang. Unlearnable examples: Making personal data unexploitable. ICLR, 2021. 8
+[24] Jianqiang Huang, Yu Qin, Jiaxin Qi, Qianru Sun, and Hanwang Zhang. Deconfounded visual grounding. In AAAI, 2022. 3
+[25] Kunzhe Huang, Yiming Li, Baoyuan Wu, Zhan Qin, and Kui Ren. Backdoor defense via decoupling the training process. ICLR, 2022. 2, 3, 5, 7
+[26] Zhenya Huang, Xin Lin, Hao Wang, Qi Liu, Enhong Chen, Jianhui Ma, Yu Su, and Wei Tong. Disenqnet: Disentangled representation learning for educational questions. In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining, pages 696–704, 2021. 3, 4
+[27] Soheil Kolouri, Aniruddha Saha, Hamed Pirsiavash, and Heiko Hoffmann. Universal litmus patterns: Revealing backdoor attacks in cnns. In CVPR, 2020. 2
+[28] Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009. 5
+[29] Brenden M Lake, Tomer D Ullman, Joshua B Tenenbaum, and Samuel J Gershman. Building machines that learn and think like people. Behavioral and brain sciences, 40, 2017. 1
+[30] Shaofeng Li, Minhui Xue, Benjamin Zi Hao Zhao, Haojin Zhu, and Xinpeng Zhang. Invisible backdoor attacks on deep neural networks via steganography and regularization. arXiv preprint arXiv:1909.02742, 2019. 2
+[31] Yuezun Li, Yiming Li, Baoyuan Wu, Longkang Li, Ran He, and Siwei Lyu. Invisible backdoor attack with samplespecific triggers. In ICCV, pages 16463–16472, 2021. 2
+[32] Yige Li, Xixiang Lyu, Nodens Koren, Lingjuan Lyu, Bo Li, and Xingjun Ma. Anti-backdoor learning: Training clean models on poisoned data. NeurIPS, 2021. 2, 3, 4, 5, 6
+
+9
+
+[33] Yige Li, Xixiang Lyu, Nodens Koren, Lingjuan Lyu, Bo Li, and Xingjun Ma. Neural attention distillation: Erasing backdoor triggers from deep neural networks. In ICLR, 2021. 2, 5
+[34] Yiming Li, Haoxiang Zhong, Xingjun Ma, Yong Jiang, , and Shu-Tao Xia. Few-shot backdoor attacks on visual object tracking. ICLR, 2022. 2
+[35] Cong Liao, Haoti Zhong, Anna Squicciarini, Sencun Zhu, and David Miller. Backdoor embedding in convolutional neural network models via invisible perturbation. CODASPY, 2020. 2
+[36] Dugang Liu, Pengxiang Cheng, Hong Zhu, Zhenhua Dong, Xiuqiang He, Weike Pan, and Zhong Ming. Mitigating confounding bias in recommendation via information bottleneck. In RecSys, pages 351–360, 2021. 2
+[37] Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. Finepruning: Defending against backdooring attacks on deep neural networks. In RAID, 2018. 5
+[38] Yingqi Liu, Shiqing Ma, Yousra Aafer, Wen-Chuan Lee, Juan Zhai, Weihang Wang, and Xiangyu Zhang. Trojaning attack on neural networks. In NDSS, 2018. 1, 5
+[39] Yunfei Liu, Xingjun Ma, James Bailey, and Feng Lu. Reflection backdoor: A natural backdoor attack on deep neural networks. In ECCV, 2020. 2
+[40] Yahui Liu, Enver Sangineto, Wei Bi, Nicu Sebe, Bruno Lepri, and Marco Nadai. Efficient training of visual transformers with small datasets. NeurIPS, 34:23818–23830, 2021. 12
+[41] XiaoFeng Wang Lorenzo Cavallaro, Johannes Kinder and Jonathan Katz. Latent backdoor attacks on deep neural networks. SIGSAC, 2019. 2
+[42] David JC MacKay, David JC Mac Kay, et al. Information theory, inference and learning algorithms. Cambridge university press, 2003. 4
+[43] Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks. ICLR, 2018. 8
+[44] Jovana Mitrovic, Brian McWilliams, Jacob Walker, Lars Buesing, and Charles Blundell. Representation learning via invariant causal mechanisms. ICLR, 2020. 3
+[45] Takeru Miyato, Toshiki Kataoka, Masanori Koyama, and Yuichi Yoshida. Spectral normalization for generative adversarial networks. arXiv preprint arXiv:1802.05957, 2018. 5
+[46] Junhyun Nam, Hyuntak Cha, Sungsoo Ahn, Jaeho Lee, and Jinwoo Shin. Learning from failure: De-biasing classifier from biased classifier. NeurIPS, 2020. 3
+[47] Anh Nguyen and Anh Tran. Input-aware dynamic backdoor attack. In NeurIPS, 2020. 2, 5
+[48] Anh Nguyen and Anh Tran. Wanet–imperceptible warpingbased backdoor attack. ICLR, 2021. 2, 5, 7
+[49] Yulei Niu, Kaihua Tang, Hanwang Zhang, Zhiwu Lu, XianSheng Hua, and Ji-Rong Wen. Counterfactual vqa: A causeeffect look at language bias. In CVPR, 2021. 3
+[50] Judea Pearl. Causality. Cambridge university press, 2009. 2, 3
+
+[51] Judea Pearl and Dana Mackenzie. The book of why: the new
+
+science of cause and effect. Basic Books, 2018. 3
+
+[52] Jonas Peters, Dominik Janzing, and Bernhard Scho¨lkopf. El-
+
+ements of causal inference: foundations and learning algo-
+
+rithms. The MIT Press, 2017. 2, 3
+
+[53] Aniruddha Saha, Akshayvarun Subramanya, and Hamed Pir-
+
+siavash. Hidden trigger backdoor attacks. In AAAI, vol-
+
+ume 34, pages 11957–11965, 2020. 1, 2
+
+[54] Bernhard Scho¨lkopf, Francesco Locatello, Stefan Bauer,
+
+Nan Rosemary Ke, Nal Kalchbrenner, Anirudh Goyal, and
+
+Yoshua Bengio. Toward causal representation learning. Pro-
+
+ceedings of the IEEE, 2021. 3
+
+[55] Ali Shafahi, W Ronny Huang, Mahyar Najibi, Octavian Su-
+
+ciu, Christoph Studer, Tudor Dumitras, and Tom Goldstein.
+
+Poison frogs! targeted clean-label poisoning attacks on neu-
+
+ral networks. In NeurIPS, 2018. 2
+
+[56] Guangyu Shen, Yingqi Liu, Guanhong Tao, Shengwei An,
+
+Qiuling Xu, Siyuan Cheng, Shiqing Ma, and Xiangyu Zhang.
+
+Backdoor scanning for deep neural networks through k-arm
+
+optimization. In ICML, 2021. 2
+
+[57] Johannes Stallkamp, Marc Schlipsing, Jan Salmen, and
+
+Christian Igel. Man vs. computer: Benchmarking machine
+
+learning algorithms for traffic sign recognition. Neural net-
+
+works, 32:323–332, 2012. 5
+
+[58] Di Tang, XiaoFeng Wang, Haixu Tang, and Kehuan Zhang.
+
+Demon in the variant: Statistical analysis of dnns for ro-
+
+bust backdoor contamination detection. In USENIX Security,
+
+2021. 2
+
+[59] Kaihua Tang, Jianqiang Huang, and Hanwang Zhang. Long-
+
+tailed classification by keeping the good and removing the
+
+bad momentum causal effect. NeurIPS, 2020. 3
+
+[60] Joshua B Tenenbaum, Charles Kemp, Thomas L Griffiths,
+
+and Noah D Goodman. How to grow a mind: Statistics,
+
+structure, and abstraction. science, 331(6022):1279–1285,
+
+2011. 1
+
+[61] Naftali Tishby, Fernando C Pereira, and William Bialek.
+
+The information bottleneck method. arXiv preprint
+
+physics/0004057, 2000. 4
+
+[62] Brandon Tran, Jerry Li, and Aleksander Madry. Spectral
+
+signatures in backdoor attacks. In NeurIPS, 2018. 2
+
+[63] Alexander Turner, Dimitris Tsipras, and Alek-
+
+sander Madry.
+
+Clean-label backdoor attacks.
+
+https://people.csail.mit.edu/madry/lab/, 2019. 2
+
+[64] Laurens van der Maaten and Geoffrey Hinton. Visualizing
+
+data using t-sne. Journal of Machine Learning Research,
+
+9(86):2579–2605, 2008. 7
+
+[65] Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bi-
+
+mal Viswanath, Haitao Zheng, and Ben Y Zhao. Neural
+
+cleanse: Identifying and mitigating backdoor attacks in neu-
+
+ral networks. In S&P. IEEE, 2019. 2
+
+[66] Guoqing Wang, Hu Han, Shiguang Shan, and Xilin Chen.
+
+Cross-domain face presentation attack detection via multi-
+
+domain disentangled representation learning. In Proceedings
+
+of the IEEE/CVF Conference on Computer Vision and Pat-
+
+tern Recognition, pages 6678–6687, 2020. 2, 3, 4
+
+[67] Xiaojun Xu, Qi Wang, Huichen Li, Nikita Borisov, Carl A
+
+Gunter, and Bo Li. Detecting ai trojans using meta neural
+
+analysis. In S&P, 2021. 2
+
+10
+
+[68] Zhongqi Yue, Hanwang Zhang, Qianru Sun, and Xian-Sheng Hua. Interventional few-shot learning. NeurIPS, 2020. 3
+[69] Sergey Zagoruyko and Nikos Komodakis. Wide residual networks. In BMVC, 2016. 5, 12
+[70] Cheng Zhang, Kun Zhang, and Yingzhen Li. A causal view on robustness of neural networks. NeurIPS, 2020. 2, 3
+[71] Yonggang Zhang, Mingming Gong, Tongliang Liu, Gang Niu, Xinmei Tian, Bo Han, Bernhard Scho¨lkopf, and Kun Zhang. Adversarial robustness through the lens of causality. ICLR, 2022. 2, 3
+[72] Zaixi Zhang, Xiaoyu Cao, Jinyuan Jia, and Neil Zhenqiang Gong. Fldetector: Defending federated learning against model poisoning attacks via detecting malicious clients. In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining, pages 2545–2555, 2022. 2
+[73] Zaixi Zhang, Jinyuan Jia, Binghui Wang, and Neil Zhenqiang Gong. Backdoor attacks to graph neural networks. In Proceedings of the 26th ACM Symposium on Access Control Models and Technologies, pages 15–26, 2021. 2
+[74] Zaixi Zhang, Qi Liu, Qingyong Hu, and Chee-Kong Lee. Hierarchical graph transformer with adaptive node sampling. Advances in Neural Information Processing Systems, 2022. 8
+[75] Zaixi Zhang, Qi Liu, Zhenya Huang, Hao Wang, Chee-Kong Lee, and Enhong Chen. Model inversion attacks against graph neural networks. IEEE Transactions on Knowledge and Data Engineering, 2022. 8
+[76] Zaixi Zhang, Qi Liu, Zhenya Huang, Hao Wang, Chengqiang Lu, Chuanren Liu, and Enhong Chen. Graphmi: Extracting private graph data from graph neural networks. IJCAI, 2021. 8
+[77] Zaixi Zhang, Qi Liu, Hao Wang, Chengqiang Lu, and Cheekong Lee. Protgnn: Towards self-explaining graph neural networks. In Proceedings of the AAAI Conference on Artificial Intelligence, volume 36, pages 9127–9135, 2022. 8
+[78] Zaixi Zhang, Qi Liu, Hao Wang, Chengqiang Lu, and CheeKong Lee. Motif-based graph self-supervised learning for molecular property prediction. Advances in Neural Information Processing Systems, 34:15870–15882, 2021. 8
+[79] Zaixi Zhang, Qi Liu, Shengyu Zhang, Chang-Yu Hsieh, Liang Shi, and Chee-Kong Lee. Graph self-supervised learning for optoelectronic properties of organic semiconductors. ICML AI4Science workshop, 2022. 8
+[80] Pu Zhao, Pin-Yu Chen, Payel Das, Karthikeyan Natesan Ramamurthy, and Xue Lin. Bridging mode connectivity in loss landscapes and adversarial robustness. In ICLR, 2020. 2, 5, 6
+[81] Shihao Zhao, Xingjun Ma, Xiang Zheng, James Bailey, Jingjing Chen, and Yu-Gang Jiang. Clean-label backdoor attacks on video recognition models. In CVPR, pages 14443– 14452, 2020. 2
+[82] Chen Zhu, W Ronny Huang, Hengduo Li, Gavin Taylor, Christoph Studer, and Tom Goldstein. Transferable cleanlabel poisoning attacks on deep neural nets. In ICML, 2019. 2
+11
+
+A. More Experimental Settings
+A.1. Datasets and Classifiers
+The datasets and DNN models used in our experiments are summarized in Table 4.
+A.2. Details of Baseline Implementations
+We implemented the baselines including FP1, MCR2, NAD3 ABL4, and DBD 5 with their open-sourced codes. For Fine-pruning (FP), we pruned the last convolutional layer of the model. For model connectivity repair (MCR), we trained the loss curve for 100 epochs using the backdoored model as an endpoint and evaluated the defense performance of the model on the loss curve. As for the Neural Attention Distillation (NAD), we finetuned the backdoored student network for 10 epochs with 5% of clean data. The distillation parameter for CIFAR-10 was set to be identical to the value given in the original paper. We cautiously selected the value of distillation parameter for GTSRB and ImageNet to achieve the best trade-off between ASR and CA. For ABL, we unlearned the backdoored model using the LGGA loss with 1% isolated backdoor examples and a learning rate of 0.0001. For our DBD, we adopt SimCLR as the self-supervised method and MixMatch as the semisupervised method. The filtering rate is set to 50% as suggested by the original paper.
+A.3. Details of CBD Implementations
+In CBD, fC is trained on poisoned datasets for 100 epochs using Stochastic Gradient Descent (SGD) with an initial learning rate of 0.1 on CIFAR-10 and the ImageNet subset (0.01 on GTSRB), a weight decay of 0.0001, and a momentum of 0.9. The learning rate is divided by 10 at the 20th and the 70th epoch. Dϕ is set as a MLP with 2 layers. The dimensions of the embedding r and z are set as 64.
+B. More Experimental Results
+B.1. Results of Adaptive Attacks
+The pseudo codes of adaptive attacks against CBD are shown in Algorithm 2. The results of adaptive attacks with different kinds of backdoor are shown in Table 5. We also show the curves of training losses on clean/backdoor examples in the optimization of added noise along with the vanilla training for reference. In Figure 4, we can observe that the training losses of backdoor examples reaches almost zero after several epochs of training (first line) while
+1https://github.com/kangliucn/Fine-pruning-defense 2https://github.com/IBM/model-sanitization 3https://github.com/bboylyg/NAD 4https://github.com/bboylyg/ABL 5https://github.com/SCLBD/DBD
+
+Algorithm 2 Adaptive Attack to CBD
+Input: Model fθ, poisoned dataset D′, clean dataset D, perturbation range ϵ, number of training iterations T , step size α, update steps M . Output: optimized poisoned dataset D′
+
+1: Initialize fθ 2: for t = 1, · · · , T do 3: Draw a mini-batch B = {(x(i), y(i))}ni=1 from D ∪
+D′
+
+4: θ ← θ − η∇θ (x,y)∈B L(fθ(x), y) 5: for (xi, yi) in D′ do
+6: for m = 1, · · · , M do
+
+7:
+
+xi ← Πϵ(xi + α · ∇xL(fθ(xi), yi))
+
+8:
+
+end for
+
+9: end for
+
+10: end for
+
+our adaptive attack strategy managed to increase the losses of backdoor examples in the optimization process (second line). The above observation indicates that the backdoor examples are much easier to learn than clean examples in vanilla training. The adaptive attack can slow the injection of backdoor and try to make the backdoor attack stealthier to bypass CBD. However, our CBD can still defend the adaptive attack successfully (Table 5). The reason is most probably that the optimized noise becomes less effective when the model is retrained and the model parameters are randomly initialized. In another word, the optimized noise is not transferable.
+
+7HVW/RVV
+
+
+
+&OHDQ([DPSOHV
+
+
+
+%DFNGRRU([DPSOHV 
+
+&OHDQ([DPSOHV
+
+%DFNGRRU([DPSOHV
+
+
+
+&OHDQ([DPSOHV
+
+%DFNGRRU([DPSOHV
+
+
+
+&OHDQ([DPSOHV %DFNGRRU([DPSOHV
+
+7HVW/RVV
+
+7HVW/RVV
+
+7HVW/RVV
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+
+      
+
+      
+
+      
+
+(SRFKV
+
+(SRFKV
+
+(SRFKV
+
+(SRFKV
+
+(a) BadNets
+
+(b) Trojan
+
+(c) Blend
+
+(d) WaNet
+
+     
+
+
+&OHDQ([DPSOHV
+
+
+
+%DFNGRRU([DPSOHV
+
+
+
+7UDLQLQJ/RVV
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+(SRFKV
+
+&OHDQ([DPSOHV
+
+
+
+%DFNGRRU([DPSOHV 
+
+7UDLQLQJ/RVV
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+(SRFKV
+
+&OHDQ([DPSOHV
+
+
+
+%DFNGRRU([DPSOHV
+
+
+
+7UDLQLQJ/RVV
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+(SRFKV
+
+&OHDQ([DPSOHV %DFNGRRU([DPSOHV
+
+
+
+
+
+ 
+
+(SRFKV
+
+(e) BadNets
+
+(f) Trojan
+
+(g) Blend
+
+(h) WaNet
+
+7UDLQLQJ/RVV
+
+Figure 4. The curve of training losses on clean/backdoor examples in the vanilla training (first line) and in the optimization of adaptive attacks (second line). This experiment is conducted with WideResNet-16-1 for CIFAR-10 under poisoning rate 10%.
+
+B.2. Results with Different Model Architectures
+Note that our CBD is agnostic to the choice of model architectures. In the main text, we report the results with WideResNet-16-1 and ResNet-34. Here, in Table 6 and 7, we show experimental results on CIFAR-10 with WideResNet-40-1 [69] and th T2T-ViT [40] under poisoning rate 10%. We can observe that CBD can still greatly
+
+12
+
+Table 4. Details of datasets and classifiers in the paper
+
+Dataset
+CIFAR-10 GTSRB ImageNet subset
+
+Labels
+10 43 12
+
+Input Size
+32 x 32 x 3 32 x 32 x 3 224 x 224 x 3
+
+Training Images
+50000 39252 12406
+
+Classifier
+WideResNet-16-1 WideResNet-16-1
+ResNet-34
+
+Table 5. Attack success rate (ASR %) and clean accuracy (CA %) of Adaptive Attacks.
+
+BadNets Trojan
+
+Blend
+
+WaNet
+
+Defense
+
+ASR CA ASR CA ASR CA ASR CA
+
+None 99.62 84.55 99.85 84.32 97.63 84.45 97.24 85.47
+
+CBD 4.31 84.19 3.77 84.37 2.57 84.49 5.19 85.33
+
+reduce the attack success rate and keep clean accuracy with different model architectures.
+Table 6. Results on CIFAR10 with WideResNet-40-1. We show attack success rates (ASR %) and clean accuracy (CA %).
+
+BadNets Trojan
+
+Blend
+
+WaNet
+
+Defense
+
+ASR CA ASR CA ASR CA ASR CA
+
+None 100 92.96 100 93.21 99.83 92.69 98.35 92.88
+
+CBD 0.95 92.54 1.04 92.70 1.32 92.17 2.54 92.26
+
+Table 7. Results on CIFAR10 with T2T-ViT. We show the attack success rates (ASR %) and the clean accuracy (CA %).
+
+BadNets Trojan
+
+Blend
+
+WaNet
+
+Defense
+
+ASR CA ASR CA ASR CA ASR CA
+
+None 100 85.65 100 85.86 99.42 85.66 99.30 86.27
+
+CBD 0.89 86.05 0.97 86.61 1.59 85.82 3.80 85.94
+
+B.3. The computational time of other defenses.
+Table. 8 shows the total computational time of defense methods against BadNets. As the methods belong to different categories, we count the time to train backdoored models for FP, MCR, and NAD for a fair comparison. Generally, the time cost of CBD is acceptable.
+
+Table 8. The total computational time (seconds) on CIFAR10 with WRN-16-1. The percentages in parentheses indicate the relative increase compared to no defence (None).
+
+None FP
+
+MCR
+
+NAD
+
+ABL
+
+DBD CBD (ours)
+
+1152 1515(31.5%) 3445(127.4%) 1306(13.4%) 1383(20.0%) 5280(358.3%) 1317(14.3%)
+
+C. Details of Derivations
+Here we show the details of derivation with respect to Equ. 4. Since the p(z|x) = N (µ(x), diag{σ2(x)}) and
+
+p(x) = N (0, 1) are multivariate Gaussian distributions with independent components, we only need to derive the case with univariate Gaussian distributions. For the univariate case, we have:
+
+ \begin {aligned} &D_{\rm KL}(\mathcl {N}(\mu ,\sigma ^2)|\mathcl {N}(0,1)\&=int \frac {1}\sqrt {2\pi sgma ^2}e^{-(x\mu )^2/\sigma ^2}\left ({\rm log}\frac {e^-(x\mu )^2/\sigma ^2}/\sqrt {2\pi sgma ^2}{e^-x2/}\sqrt {2\pi }\right )dx\ &=int \frac {1}\sqrt {2\pi sgma ^2}e^{-(x\mu )^2/\sigma ^2}{\rm log}\eft \{frac {1}\sigma }{\rm exp}\left \{frac {1}2[x^-(\mu )^2/\sigma ^2]\right \}right \}dx\ &=frac {1}2 \intfrac {1}\sqrt {2\pi sgma ^2}e^{-(x\mu )^2/\sigma ^2}[-{\rm log}\sima ^2+x-(\mu )^2/\sigma ^2]dx \&=frac {1}2 (-{\rm log}\sima ^2+\mu ^2+\sigma ^2-1). \labe {1}\end {aligned} 
+
+(11)
+
+The final equation of Equ. 11 holds because −logσ2 is a
+
+constant; the term x2 is the second order moment of the
+
+Gaussian distribution and equals to µ2+σ2 after integration;
+
+the (x − µ)2 in the third term calculates the variance and
+
+equals to σ2
+
+after
+
+integration
+
+(−
+
+σ2 σ2
+
+=
+
+−1).
+
+For the results
+
+of multivariate Gaussian distributions, we have:
+
+ \begin {aligned} &D_{\rm KL}(p(z|x)|q(z)\&=D_{\rm KL}(\mathcal {N}(\mu (x),{\rm diag}\{\sigma ^2(x)\})|\mathcal {N}(0,1)\&=\frac {1}{2}\sum _d (-{\rm log}\sigma _d^2+\mu _d^2+\sigma _d^2-1)\&= \frac {1}{2}|\mu (x)|_2^2+\frac {1}{2}\sum _d(\sigma _d^2- {\rm log}\sigma _d^2 -1). \end {aligned} 
+
+(12)
+
+Therefore, Equ. 4 in the main text has been proved.
+
+13
+
